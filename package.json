@@ -1,29 +1,40 @@
 {
   "name": "tdd-ai-companion",
-  "displayName": "tdd-ai-companion",
-  "description": "",
+  "displayName": "TDD AI Companion",
+  "description": "AI-powered Test-Driven Development assistant",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.97.0"
   },
   "categories": [
+    "Testing",
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:tdd-ai-companion.sidebar"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "tdd-ai-companion.helloWorld",
-        "title": "Hello World"
+        "command": "tdd-ai-companion.setupProject",
+        "title": "TDD AI: Setup Project"
       },
       {
-        "command": "tdd-ai-companion.scanDocument",
-        "title": "Scan Document"
+        "command": "tdd-ai-companion.suggestTestCase",
+        "title": "TDD AI: Suggest Test Case"
       },
       {
-        "command": "tdd-ai-companion.scanFiles",
-        "title": "Scan Files"
+        "command": "tdd-ai-companion.updateSourceFiles",
+        "title": "TDD AI: Update Source Files"
+      },
+      {
+        "command": "tdd-ai-companion.updateTestFiles",
+        "title": "TDD AI: Update Test Files"
+      },
+      {
+        "command": "tdd-ai-companion.updateFeature",
+        "title": "TDD AI: Update Current Feature"
       }
     ],
     "viewsContainers": {
@@ -40,9 +51,19 @@
         {
           "type": "webview",
           "id": "tdd-ai-companion.sidebar",
-          "name": "Sidebar"
+          "name": "TDD Assistant"
         }
       ]
+    },
+    "configuration": {
+        "title": "TDD AI Companion",
+        "properties": {
+            "tddAICompanion.openRouterApiKey": {
+                "type": "string",
+                "default": "",
+                "description": "API key for OpenRouter to access DeepSeek r1"
+            }
+        }
     }
   },
   "scripts": {

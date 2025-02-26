@@ -1,0 +1,14 @@
+@font-face {
+    font-family: "codicon";
+    font-display: block;
+    src: url("./codicon.ttf") format("truetype");
+}
+
+.codicon-settings-gear:before { content: "\eb51"; }
+.codicon-play:before { content: "\eb2c"; }
+.codicon-symbol-event:before { content: "\eb24"; }
+.codicon-file-code:before { content: "\eb3d"; }
+.codicon-beaker:before { content: "\ea79"; }
+.codicon-send:before { content: "\eb31"; }
+.codicon-edit:before { content: "\ea73"; }
+.codicon-clear-all:before { content: "\eb99"; }
