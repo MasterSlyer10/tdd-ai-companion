@@ -311,3 +311,258 @@ body {
     text-align: center;
     -webkit-font-smoothing: antialiased;
 }
+
+/* Add these styles to your existing CSS file */
+
+/* Tree View Styles */
+.tree-view-container {
+    background-color: var(--background-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin: 8px 0;
+    max-height: 300px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.tree-view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--background-elevated);
+}
+
+.tree-view-header h3 {
+    font-size: 12px;
+    margin: 0;
+    font-weight: 600;
+}
+
+.tree-view-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.tree-filter {
+    padding: 6px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tree-filter input {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 3px;
+    background-color: var(--input-background);
+    color: var(--input-foreground);
+}
+
+.tree-view {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+    font-size: 12px;
+}
+
+.tree-item {
+    display: flex;
+    align-items: center;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+}
+
+.tree-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.tree-item.selected {
+    background-color: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.tree-item-icon {
+    margin-right: 4px;
+    font-size: 14px;
+}
+
+.tree-item-expand {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 2px;
+    cursor: pointer;
+}
+
+.tree-item-indent {
+    width: 16px;
+    height: 16px;
+}
+
+.tree-children {
+    padding-left: 16px;
+}
+
+/* Selection Summary Styles */
+.selection-summary {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.selection-section h4 {
+    font-size: 12px;
+    margin: 0 0 4px 0;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.chip-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-height: 24px;
+    padding: 4px 0;
+}
+
+.file-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background-color: var(--background-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 2px 8px;
+}
+
+.file-chip-remove {
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.file-chip-remove:hover {
+    background-color: rgba(128, 128, 128, 0.2);
+}
+
+/* Context menu for selecting file types */
+.context-menu {
+    position: absolute;
+    z-index: 100;
+    background-color: var(--background-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px var(--shadow-color);
+    font-size: 12px;
+    min-width: 180px;
+}
+
+.context-menu-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.context-menu-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Add styles for the checkboxes */
+.tree-item-checkbox {
+    margin: 0 4px 0 0;
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+}
+
+/* Adjust padding for tree items to account for checkboxes */
+.tree-item {
+    display: flex;
+    align-items: center;
+    padding: 2px 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+}
+
+/* Make the tree view taller to accommodate more items */
+.tree-view-container {
+    background-color: var(--background-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin: 8px 0;
+    max-height: 400px; /* Increased height for better visibility */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Add these styles to your existing CSS */
+
+.selection-mode-controls {
+    display: flex;
+    padding: 8px 10px;
+    gap: 12px;
+    background-color: var(--vscode-editor-background);
+    border-bottom: 1px solid var(--vscode-panel-border);
+  }
+  
+  .toggle-control {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+  }
+  
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+  }
+
+  /* Add these styles to your existing CSS */
+
+.feature-input-container {
+    flex: 1;
+    margin-right: 5px;
+  }
+  
+  #feature-input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--vscode-input-border);
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border-radius: 2px;
+    font-size: 12px;
+    outline: none;
+  }
+  
+  #feature-input:focus {
+    border-color: var(--vscode-focusBorder);
+  }
+  
+  #feature-input::placeholder {
+    color: var(--vscode-input-placeholderForeground);
+  }
