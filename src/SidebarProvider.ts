@@ -376,8 +376,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this._extensionUri, "media", "script.js")
     );
+
     const codiconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, "media", "codicon.css")
+      vscode.Uri.joinPath(
+        this._extensionUri,
+        "node_modules",
+        "@vscode/codicons",
+        "dist",
+        "codicon.css"
+      )
     );
 
     return `<!DOCTYPE html>
@@ -450,7 +457,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="chat-container">
                         <div id="chat-messages" class="messages-container"></div>
                         <div class="input-container">
-                            <textarea id="chat-input" class="message-input" placeholder="Request test case suggestions..."></textarea>
+                            <div class="action-buttons">
+                                <button id="suggest-test-button" class="action-button" title="Generate test suggestions">
+                                    <i class="codicon codicon-lightbulb"></i> Suggest Tests
+                                </button>
+                            </div>
+                            <textarea id="chat-input" class="message-input" placeholder="Enter your message..."></textarea>
                             <button id="send-button" class="send-button" title="Send Request">
                                 <i class="codicon codicon-send"></i>
                             </button>
@@ -458,6 +470,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     </div>
                 </section>
     
+                <!--
                 <section class="history-section">
                     <div class="history-header">
                         <h2 class="section-title">Suggestion History</h2>
@@ -467,6 +480,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     </div>
                     <div id="suggestions-history" class="history-container"></div>
                 </section>
+                -->
             </div>
     
             <script src="${scriptUri}"></script>

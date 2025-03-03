@@ -81,6 +81,11 @@ export function activate(context: vscode.ExtensionContext) {
   const suggestTestCaseCommand = vscode.commands.registerCommand(
     "tdd-ai-companion.suggestTestCase",
     async (userMessage: string) => {
+      // Debug
+      console.log(sidebarProvider.getSourceFiles());
+      console.log(sidebarProvider.getTestFiles());
+      console.log(sidebarProvider.getCurrentFeature());
+
       // Check if setup was done
       if (
         sidebarProvider.getSourceFiles().length === 0 ||
@@ -203,6 +208,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
+// Responsible for opening the file based on the path
 async function readFilesContent(files: vscode.Uri[]): Promise<string> {
   let combinedContent = "";
 
@@ -211,6 +217,10 @@ async function readFilesContent(files: vscode.Uri[]): Promise<string> {
       const document = await vscode.workspace.openTextDocument(file);
       const fileName = path.basename(file.fsPath);
       combinedContent += `File: ${fileName}\n\n${document.getText()}\n\n`;
+
+      //Debug
+      console.log("Reading file: ", file.fsPath);
+      console.log("Content: ", document.getText());
     } catch (error) {
       console.error(`Error reading file ${file.fsPath}:`, error);
     }
@@ -218,6 +228,7 @@ async function readFilesContent(files: vscode.Uri[]): Promise<string> {
 
   return combinedContent;
 }
+
 // Change ts to whatever Richter did for in finetuning
 function createTestSuggestionPrompt(
   sourceContent: string,

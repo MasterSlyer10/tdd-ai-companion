@@ -13,22 +13,26 @@
 
   // DOM Elements
   const featureInput = document.getElementById("feature-input");
-  const editFeatureButton = document.getElementById("edit-feature");
+  // const editFeatureButton = document.getElementById("edit-feature");
+
   const fileTreeElement = document.getElementById("file-tree");
   const refreshTreeButton = document.getElementById("refresh-tree");
   const collapseAllButton = document.getElementById("collapse-all");
   const fileFilterInput = document.getElementById("file-filter");
   const sourceFilesContainer = document.getElementById("source-files");
   const testFilesContainer = document.getElementById("test-files");
+
   const chatInput = document.getElementById("chat-input");
   const sendButton = document.getElementById("send-button");
+  const suggestTestButton = document.getElementById("suggest-test-button");
   const chatMessages = document.getElementById("chat-messages");
   const suggestionsHistory = document.getElementById("suggestions-history");
-  const clearHistoryButton = document.getElementById("clear-history");
+  // const clearHistoryButton = document.getElementById("clear-history");
 
   // Initialize
   document.addEventListener("DOMContentLoaded", () => {
     init();
+    console.log("Document loaded"); // Debugging
   });
 
   function init() {
@@ -60,9 +64,9 @@
 
   function setupEventListeners() {
     // Feature editing
-    editFeatureButton.addEventListener("click", () => {
-      promptForFeature();
-    });
+    // editFeatureButton.addEventListener("click", () => {
+    //   promptForFeature();
+    // });
 
     // Tree view controls
     refreshTreeButton.addEventListener("click", () => {
@@ -79,16 +83,39 @@
     });
 
     // Chat functionality
-    sendButton.addEventListener("click", sendChatMessage);
-    chatInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
+    if (sendButton) {
+      console.log("Send button found");
+      sendButton.addEventListener("click", () => {
+        console.log("Send button clicked"); // Debugging
         sendChatMessage();
-      }
-    });
+      });
+    } else {
+      console.error("Send button not found");
+    }
+
+    if (suggestTestButton) {
+      suggestTestButton.addEventListener("click", () => {
+        console.log("Suggest test button clicked");
+        sendPredefinedSuggestion();
+      });
+    } else {
+      console.error("Suggest test button not found");
+    }
+
+    if (chatInput) {
+      chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          console.log("Enter key pressed"); // Debugging
+          sendChatMessage();
+        }
+      });
+    } else {
+      console.error("Chat input not found");
+    }
 
     // Clear history
-    clearHistoryButton.addEventListener("click", clearHistory);
+    // clearHistoryButton.addEventListener("click", clearHistory);
   }
 
   // Feature handling
@@ -676,23 +703,124 @@
     return chip;
   }
 
-  // Chat functionality
+  // CHAT FUNCTIONALITY PARTS
+  //
   function sendChatMessage() {
     const message = chatInput.value.trim();
-    if (!message) return;
+    if (!message) {
+      return; // Don't send empty messages
+    }
+
+    console.log("Sending message:", message); // Debugging
 
     // Add message to UI
-    addUserMessage(message);
+    addMessageToChat(message, true);
+
+    // Clear input field
+    chatInput.value = "";
+
+    // Display loading indicator
+    const loadingElement = document.createElement("div");
+    loadingElement.className = "loading-indicator";
+    loadingElement.textContent = "Generating response...";
+    chatMessages.appendChild(loadingElement);
+
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 
     // Send message to extension
     vscode.postMessage({
       command: "requestTestSuggestion",
       message: message,
     });
-
-    // Clear input
-    chatInput.value = "";
   }
+
+  // Simple Suggest Button
+  function sendPredefinedSuggestion() {
+    // Send a predefined message
+    const predefinedMessage =
+      "Suggest a new test case for my current implementation";
+
+    // Set the input field text (optional - shows the user what's being sent)
+    if (chatInput) {
+      chatInput.value = predefinedMessage;
+    }
+
+    // Add message to UI
+    addMessageToChat(predefinedMessage, true);
+
+    // Clear input field
+    if (chatInput) {
+      chatInput.value = "";
+    }
+
+    // Display loading indicator
+    const loadingElement = document.createElement("div");
+    loadingElement.className = "loading-indicator";
+    loadingElement.textContent = "Generating response...";
+    chatMessages.appendChild(loadingElement);
+
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Send message to extension
+    vscode.postMessage({
+      command: "requestTestSuggestion",
+      message: predefinedMessage,
+    });
+  }
+
+  // Add user message to chat UI
+  function addMessageToChat(content, isUser = false) {
+    // Create message element
+    const messageElement = document.createElement("div");
+    messageElement.className = isUser
+      ? "message user-message"
+      : "message ai-message";
+
+    // Add avatar
+    const avatarElement = document.createElement("div");
+    avatarElement.className = "message-avatar";
+    avatarElement.innerHTML = isUser
+      ? '<i class="codicon codicon-account"></i>'
+      : '<i class="codicon codicon-beaker"></i>';
+    messageElement.appendChild(avatarElement);
+
+    // Add content
+    const contentElement = document.createElement("div");
+    contentElement.className = "message-content";
+
+    // For AI messages, use marked to render markdown
+    if (!isUser && typeof marked !== "undefined") {
+      contentElement.innerHTML = marked.parse(content);
+      // Enable syntax highlighting if Prism is available
+      if (typeof Prism !== "undefined") {
+        contentElement.querySelectorAll("pre code").forEach((block) => {
+          Prism.highlightElement(block);
+        });
+      }
+    } else {
+      contentElement.textContent = content;
+    }
+
+    messageElement.appendChild(contentElement);
+
+    // Remove any loading indicators
+    const loadingIndicators =
+      chatMessages.querySelectorAll(".loading-indicator");
+    loadingIndicators.forEach((indicator) => indicator.remove());
+
+    // Add to chat
+    chatMessages.appendChild(messageElement);
+
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Save chat history
+    saveChatHistory();
+  }
+
+  //
 
   function addUserMessage(text) {
     const messageElement = document.createElement("div");
@@ -746,6 +874,7 @@
     return -1;
   }
 
+  // To fix
   function loadHistoryFromStorage() {
     try {
       const storedHistory = vscode.getState()?.history;
@@ -756,6 +885,7 @@
     }
   }
 
+  // To fix
   function saveHistoryToStorage(history) {
     try {
       vscode.setState({ ...vscode.getState(), history });
@@ -764,6 +894,7 @@
     }
   }
 
+  // To fix
   function updateHistoryUI(history) {
     suggestionsHistory.innerHTML = "";
 
@@ -796,33 +927,25 @@
 
   // Save chat history
   function saveChatHistory() {
-    const messages = Array.from(chatMessages.children).map((msg) => {
-      const messageType = msg.classList.contains("user-message")
-        ? "user"
-        : "ai";
-      const content = msg.querySelector(".message-content").innerHTML;
-      return { type: messageType, content: content };
-    });
+    const messages = Array.from(chatMessages.children)
+      .filter(
+        (msg) =>
+          msg.classList.contains("user-message") ||
+          msg.classList.contains("ai-message")
+      )
+      .map((msg) => {
+        const isUser = msg.classList.contains("user-message");
+        const content = msg.querySelector(".message-content").textContent;
+        return {
+          role: isUser ? "user" : "assistant",
+          content: content,
+        };
+      });
 
     vscode.postMessage({
       command: "saveChatHistory",
       history: messages,
     });
-  }
-
-  // After adding a message to the chat
-  function addMessageToChat(content, isUser = false) {
-    // ... your existing code to add message ...
-
-    // Save the updated history
-    saveChatHistory();
-  }
-
-  function clearHistory() {
-    if (confirm("Are you sure you want to clear the suggestion history?")) {
-      saveHistoryToStorage([]);
-      updateHistoryUI([]);
-    }
   }
 
   // Handle messages from the extension
@@ -852,7 +975,13 @@
         break;
 
       case "addResponse":
-        addAssistantMessage(message.response);
+        // Remove any loading indicators
+        const loadingIndicators =
+          chatMessages.querySelectorAll(".loading-indicator");
+        loadingIndicators.forEach((indicator) => indicator.remove());
+
+        // Add the AI response to the chat
+        addMessageToChat(message.response, false);
         break;
 
       case "updateCheckedItems":
