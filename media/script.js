@@ -36,6 +36,11 @@
   });
 
   function init() {
+    // Tells the extension when the view is ready to receive
+    vscode.postMessage({
+      command: "webviewReady",
+    });
+
     // Set up event listeners
     setupEventListeners();
 
@@ -430,7 +435,6 @@
   }
 
   // Add function to recursively update child checkboxes
-  // Replace your existing updateChildCheckboxes function
   function updateChildCheckboxes(node, isChecked) {
     if (!node.children) return;
 

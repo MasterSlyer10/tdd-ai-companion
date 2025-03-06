@@ -9,9 +9,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "tdd-ai-companion.sidebar";
 
   public _view?: vscode.WebviewView;
+  private _currentFeature: string = "";
   private _sourceFiles: vscode.Uri[] = [];
   private _testFiles: vscode.Uri[] = [];
-  private _currentFeature: string = "";
+
   private _context: vscode.ExtensionContext;
 
   private _checkedItems: string[] = [];
@@ -24,6 +25,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     context: vscode.ExtensionContext
   ) {
     this._context = context;
+
+    // Load the stuff from previous session
     this.loadState();
   }
 
@@ -39,6 +42,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   private loadState() {
+    // Load current feature
+    this._currentFeature = this._context.workspaceState.get<string>(
+      "currentFeature",
+      ""
+    );
+
     // Load source files
     const sourceFiles = this._context.workspaceState.get<string[]>(
       "sourceFiles",
@@ -52,12 +61,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       []
     );
     this._testFiles = testFiles.map((file) => vscode.Uri.file(file));
-
-    // Load current feature
-    this._currentFeature = this._context.workspaceState.get<string>(
-      "currentFeature",
-      ""
-    );
 
     // Load chat history
     this._chatHistory = this._context.workspaceState.get<any[]>(
@@ -95,6 +98,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   private saveState() {
+    // Save current feature
+    this._context.workspaceState.update("currentFeature", this._currentFeature);
+
     // Save source files
     this._context.workspaceState.update(
       "sourceFiles",
@@ -106,9 +112,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       "testFiles",
       this._testFiles.map((file) => file.fsPath)
     );
-
-    // Save current feature
-    this._context.workspaceState.update("currentFeature", this._currentFeature);
   }
 
   public resolveWebviewView(
@@ -129,28 +132,33 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.postSourceFilesUpdate();
     this.postTestFilesUpdate();
 
-    if (this._currentFeature) {
-      webviewView.webview.postMessage({
-        command: "updateFeature",
-        feature: this._currentFeature,
-      });
-    }
-
-    // Send chat history
-    webviewView.webview.postMessage({
-      command: "loadChatHistory",
-      history: this._chatHistory,
-    });
-
-    // Send checked items
-    webviewView.webview.postMessage({
-      command: "loadCheckedItems",
-      checkedItems: this._checkedItems,
-    });
-
     // Handle messages from the webview
     webviewView.webview.onDidReceiveMessage((message) => {
       switch (message.command) {
+        case "webviewReady":
+          this.postSourceFilesUpdate();
+          this.postTestFilesUpdate();
+          if (this._currentFeature) {
+            webviewView.webview.postMessage({
+              command: "updateFeature",
+              feature: this._currentFeature,
+            });
+          }
+
+          // Send chat history
+          webviewView.webview.postMessage({
+            command: "loadChatHistory",
+            history: this._chatHistory,
+          });
+
+          // Send checked items
+          webviewView.webview.postMessage({
+            command: "loadCheckedItems",
+            checkedItems: this._checkedItems,
+          });
+
+          break;
+
         case "requestTestSuggestion":
           vscode.commands.executeCommand(
             "tdd-ai-companion.suggestTestCase",
