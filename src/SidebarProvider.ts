@@ -205,6 +205,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             this._checkedItems
           );
           break;
+        case "newChat":
+          this._chatHistory = [];
+          this._context.workspaceState.update("chatHistory", this._chatHistory);
+
+          // Notify webview to clear chat UI
+          webviewView.webview.postMessage({
+            command: "clearChatUI",
+          });
+          break;
       }
     });
     // Load workspace files initially
@@ -461,7 +470,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 </section>
     
                 <section class="chat-section">
-                    <h2 class="section-title">Test Suggestions</h2>
+                    <div class="chat-header">
+                        <h2 class="section-title">Test Suggestions</h2>
+                        <button id="new-chat-button" class="action-button" title="Start a new chat">
+                            <i class="codicon codicon-new-file"></i> New Chat
+                        </button>
+                    </div>
                     <div class="chat-container">
                         <div id="chat-messages" class="messages-container"></div>
                         <div class="input-container">
@@ -477,18 +491,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                         </div>
                     </div>
                 </section>
-    
-                <!--
-                <section class="history-section">
-                    <div class="history-header">
-                        <h2 class="section-title">Suggestion History</h2>
-                        <button id="clear-history" class="text-button" title="Clear History">
-                            <i class="codicon codicon-clear-all"></i> Clear
-                        </button>
-                    </div>
-                    <div id="suggestions-history" class="history-container"></div>
-                </section>
-                -->
             </div>
     
             <script src="${scriptUri}"></script>

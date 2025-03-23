@@ -35,6 +35,14 @@
       {
         "command": "tdd-ai-companion.updateFeature",
         "title": "TDD AI: Update Current Feature"
+      },
+      {
+        "command": "tdd-ai-companion.indexCodebase",
+        "title": "TDD AI: Index Codebase for RAG"
+      },
+      {
+        "command": "tdd-ai-companion.clearCodebaseIndex",
+        "title": "TDD AI: Clear Codebase Index"
       }
     ],
     "viewsContainers": {
@@ -62,6 +70,16 @@
           "type": "string",
           "default": "",
           "description": "API key for OpenRouter to access DeepSeek r1"
+        },
+        "tddAICompanion.openAIApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for OpenAI to generate embeddings"
+        },
+        "tddAICompanion.pineconeApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for Pinecone vector database"
         }
       }
     }
@@ -86,6 +104,11 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.36"
+    "@pinecone-database/pinecone": "^5.1.1",
+    "@types/node-fetch": "^2.6.12",
+    "@types/typescript": "^2.0.0",
+    "@vscode/codicons": "^0.0.36",
+    "node-fetch": "^2.7.0",
+    "typescript-parser": "^2.6.1"
   }
 }

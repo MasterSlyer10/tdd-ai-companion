@@ -1,8 +1,11 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { SidebarProvider } from "./SidebarProvider";
+import { RAGService } from "./ragService";
+import { SUPPORTED_EXTENSIONS } from "./codeParser";
 
 let sidebarProvider: SidebarProvider;
+let ragService: RAGService;
 let typingTimeout: NodeJS.Timeout | undefined;
 
 // This method is called when your extension is activated
@@ -18,73 +21,22 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // Setup Project Command - Initial workflow when extension is opened
-  const setupProjectCommand = vscode.commands.registerCommand(
-    "tdd-ai-companion.setupProject",
-    async () => {
-      // 1. Select source code files
-      const sourceFiles = await vscode.window.showOpenDialog({
-        canSelectFiles: true,
-        canSelectMany: true,
-        openLabel: "Select Source Code Files",
-        title: "Select files containing the implementation code",
-      });
+  // Initialize the RAG service
+  ragService = new RAGService();
 
-      if (!sourceFiles) {
-        vscode.window.showWarningMessage(
-          "No source files selected. Setup cancelled."
-        );
-        return;
-      }
-
-      sidebarProvider.updateSourceFiles(sourceFiles);
-
-      // 2. Select test files
-      const testFiles = await vscode.window.showOpenDialog({
-        canSelectFiles: true,
-        canSelectMany: true,
-        openLabel: "Select Test Files",
-        title: "Select files containing the tests",
-      });
-
-      if (!testFiles) {
-        vscode.window.showWarningMessage(
-          "No test files selected. Setup cancelled."
-        );
-        return;
-      }
-
-      sidebarProvider.updateTestFiles(testFiles);
-
-      // 3. Ask for the feature being worked on
-      const feature = await vscode.window.showInputBox({
-        placeHolder: "What feature are you working on?",
-        prompt:
-          "Enter the name or description of the feature you are implementing",
-      });
-
-      if (!feature) {
-        vscode.window.showWarningMessage(
-          "No feature specified. Setup cancelled."
-        );
-        return;
-      }
-
-      sidebarProvider.updateFeature(feature);
-
-      vscode.window.showInformationMessage("TDD AI Companion setup complete!");
-    }
-  );
-  context.subscriptions.push(setupProjectCommand);
+  // Auto-clear index on project change and track current project
+  autoManageIndexForProject(context).catch((error) => {
+    console.error("Error in auto index management:", error);
+  });
 
   // Suggest Test Case Command
   const suggestTestCaseCommand = vscode.commands.registerCommand(
     "tdd-ai-companion.suggestTestCase",
     async (userMessage: string) => {
       // Debug
+      console.log(sidebarProvider.getCurrentFeature());
       console.log(sidebarProvider.getSourceFiles());
       console.log(sidebarProvider.getTestFiles());
-      console.log(sidebarProvider.getCurrentFeature());
 
       // Check if setup was done
       if (
@@ -136,8 +88,10 @@ export function activate(context: vscode.ExtensionContext) {
             const conversationHistory =
               sidebarProvider.getConversationHistory();
 
+            console.log("Conversation history:", conversationHistory);
+
             // Call the DeepSeek r1 model
-            const response = await callDeepSeekAPI(prompt);
+            const response = await callDeepSeekAPI(prompt, conversationHistory);
 
             // Display the response
             sidebarProvider.addResponse(response);
@@ -206,6 +160,165 @@ export function activate(context: vscode.ExtensionContext) {
       }
     )
   );
+
+  // Add command to index codebase for RAG
+  const indexCodebaseCommand = vscode.commands.registerCommand(
+    "tdd-ai-companion.indexCodebase",
+    async () => {
+      // Check if Pinecone API key is set
+      const config = vscode.workspace.getConfiguration("tddAICompanion");
+      const pineconeApiKey = config.get("pineconeApiKey") as string;
+
+      if (!pineconeApiKey) {
+        vscode.window.showErrorMessage(
+          "Pinecone API key is required for RAG functionality. Please set it in the extension settings."
+        );
+        return;
+      }
+
+      // Check if setup was done
+      if (
+        sidebarProvider.getSourceFiles().length === 0 &&
+        sidebarProvider.getTestFiles().length === 0
+      ) {
+        // If no files are selected, show options to select all code files
+        const select = await vscode.window.showInformationMessage(
+          "No files are currently selected. Would you like to index all code files in the workspace?",
+          "Yes",
+          "No, I'll select files manually"
+        );
+
+        if (select === "No, I'll select files manually") {
+          vscode.window.showInformationMessage(
+            "Please select source and/or test files first before indexing."
+          );
+          return;
+        } else if (select === "Yes") {
+          // Get all supported code files in the workspace
+          const filePattern = `**/*{${SUPPORTED_EXTENSIONS.join(",")}}`;
+          const files = await vscode.workspace.findFiles(
+            filePattern,
+            "**/node_modules/**"
+          );
+
+          if (files.length === 0) {
+            vscode.window.showErrorMessage(
+              "No supported code files found in workspace."
+            );
+            return;
+          }
+
+          // Ask for confirmation due to potentially large number of files
+          const confirm = await vscode.window.showWarningMessage(
+            `Found ${files.length} code files. Indexing all of them might take a while and consume API resources. Continue?`,
+            "Yes",
+            "No"
+          );
+
+          if (confirm !== "Yes") {
+            return;
+          }
+
+          // Set these files as source files
+          sidebarProvider.updateSourceFiles(files);
+        }
+      }
+
+      // Get the source and test files selected by the user
+      const sourceFiles = sidebarProvider.getSourceFiles();
+      const testFiles = sidebarProvider.getTestFiles();
+
+      // Combine the files for indexing
+      const filesToIndex = [...sourceFiles, ...testFiles];
+
+      if (filesToIndex.length === 0) {
+        vscode.window.showErrorMessage("No files selected for indexing.");
+        return;
+      }
+
+      // Prompt user for confirmation
+      const confirm = await vscode.window.showWarningMessage(
+        `This will index ${filesToIndex.length} selected files for RAG functionality. Continue?`,
+        "Yes",
+        "No"
+      );
+
+      if (confirm !== "Yes") {
+        return;
+      }
+
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Indexing selected files for RAG...",
+          cancellable: false,
+        },
+        async (progress) => {
+          try {
+            // Initialize RAG service
+            await ragService.initialize();
+
+            // Index the files
+            const success = await ragService.indexProjectFiles(filesToIndex);
+
+            if (success) {
+              vscode.window.showInformationMessage(
+                `Successfully indexed ${filesToIndex.length} files for RAG.`
+              );
+            }
+          } catch (error) {
+            console.error("Error details:", error);
+            vscode.window.showErrorMessage(
+              `Error indexing files: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+          }
+        }
+      );
+    }
+  );
+  context.subscriptions.push(indexCodebaseCommand);
+
+  // Add command to clear codebase index
+  const clearCodebaseIndexCommand = vscode.commands.registerCommand(
+    "tdd-ai-companion.clearCodebaseIndex",
+    async () => {
+      // Check if Pinecone API key is set
+      const config = vscode.workspace.getConfiguration("tddAICompanion");
+      const pineconeApiKey = config.get("pineconeApiKey") as string;
+
+      if (!pineconeApiKey) {
+        vscode.window.showErrorMessage(
+          "Pinecone API key is required for RAG functionality. Please set it in the extension settings."
+        );
+        return;
+      }
+
+      // Prompt user for confirmation
+      const confirm = await vscode.window.showWarningMessage(
+        "This will clear all indexed code chunks from the vector database. Continue?",
+        "Yes",
+        "No"
+      );
+
+      if (confirm !== "Yes") {
+        return;
+      }
+
+      try {
+        await ragService.clearIndex();
+        vscode.window.showInformationMessage(
+          "Codebase index cleared successfully."
+        );
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Error clearing codebase index: ${error}`
+        );
+      }
+    }
+  );
+  context.subscriptions.push(clearCodebaseIndexCommand);
 }
 
 // Responsible for opening the file based on the path
@@ -237,35 +350,40 @@ function createTestSuggestionPrompt(
   feature: string,
   userMessage: string
 ): string {
-  return `
-You are an expert Test-Driven Development (TDD) assistant. Your task is to SUGGEST tests for the user's code, not write them.
+  // Original Statement
+  //   `
+  // You are an expert Test-Driven Development (TDD) assistant. Your task is to SUGGEST tests for the user's code, not write them.
 
-Current feature being worked on: ${feature}
+  // Current feature being worked on: ${feature}
 
-USER'S SOURCE CODE:
-${sourceContent}
+  // USER'S SOURCE CODE:
+  // ${sourceContent}
 
-EXISTING TEST CODE:
-${testContent}
+  // EXISTING TEST CODE:
+  // ${testContent}
 
-${currentFileContext ? `CURRENTLY OPEN FILE:\n${currentFileContext}\n` : ""}
+  // ${currentFileContext ? `CURRENTLY OPEN FILE:\n${currentFileContext}\n` : ""}
 
-User's request: ${userMessage}
+  // User's request: ${userMessage}
 
-Guidelines for your response:
-1. ONLY SUGGEST test cases, don't write complete test code
-2. Focus on edge cases, boundary conditions, and comprehensive test coverage
-3. Describe what should be tested and what assertions could be made
-4. Consider the feature context and existing tests
-5. Respect the existing testing style and framework
-6. Suggest descriptive test names/descriptions that follow best TDD practices
+  // Guidelines for your response:
+  // 1. ONLY SUGGEST test cases, don't write complete test code
+  // 2. Focus on edge cases, boundary conditions, and comprehensive test coverage
+  // 3. Describe what should be tested and what assertions could be made
+  // 4. Consider the feature context and existing tests
+  // 5. Respect the existing testing style and framework
+  // 6. Suggest descriptive test names/descriptions that follow best TDD practices
 
-Response format:
-- Start with a brief analysis of the existing code and tests
-- List suggested test cases with clear explanations of what they test
-- Highlight any edge cases or potential issues to test
-- Suggest test case names/descriptions that follow the project's naming pattern
-`;
+  // Response format:
+  // - Start with a brief analysis of the existing code and tests
+  // - List suggested test cases with clear explanations of what they test
+  // - Highlight any edge cases or potential issues to test
+  // - Suggest test case names/descriptions that follow the project's naming pattern
+  // `
+
+  return `${
+    currentFileContext ? `CURRENTLY OPEN FILE:\n${currentFileContext}\n` : ""
+  }`;
 }
 
 // Define interface for the API response
@@ -282,7 +400,7 @@ interface ChatMessage {
   content: string;
 }
 
-// This shit is what will always connect to the LLM if smt is wrong with LLM / we change llm just look at this
+// This function will now use RAG for better context
 async function callDeepSeekAPI(
   prompt: string,
   conversationHistory: ChatMessage[] = []
@@ -306,17 +424,45 @@ async function callDeepSeekAPI(
   try {
     // Create the messages array
     const messages: ChatMessage[] = [
-      {
-        role: "system",
-        content:
-          "You are an expert Test-Driven Development (TDD) assistant. Your task is to SUGGEST tests for the user's code, not write them.",
-      },
+      // {
+      //   role: "system",
+      //   content:
+      //     "You are an expert Test-Driven Development (TDD) assistant. Your task is to SUGGEST tests for the user's code, not write them.",
+      // },
     ];
 
     // Add conversation history (limited to last X exchanges to avoid token limits)
+
+    console.log("Conversation History:", conversationHistory);
     const maxHistoryLength = 6; // Adjust based on your token requirements
     const recentHistory = conversationHistory.slice(-maxHistoryLength);
     messages.push(...recentHistory);
+
+    // Enhance the prompt with RAG if possible
+    let enhancedPrompt = prompt;
+    try {
+      // Check if Pinecone is configured
+      const pineconeApiKey = config.get("pineconeApiKey") as string;
+
+      if (pineconeApiKey) {
+        // Try to get relevant code chunks from the RAG service
+        const relevantChunks = await ragService.retrieveRelevantCode(prompt);
+        if (relevantChunks.length > 0) {
+          console.log("Retrieved relevant code chunks:", relevantChunks.length);
+          console.log("Relevant code chunks:", relevantChunks);
+          enhancedPrompt = ragService.augmentPromptWithCodeContext(
+            prompt,
+            relevantChunks
+          );
+
+          console.log(enhancedPrompt);
+        }
+      } else {
+        console.log("Pinecone not configured, skipping RAG enhancement");
+      }
+    } catch (error) {
+      console.warn("RAG enhancement failed, using original prompt:", error);
+    }
 
     // Add current prompt if not already in history
     if (
@@ -326,9 +472,11 @@ async function callDeepSeekAPI(
     ) {
       messages.push({
         role: "user",
-        content: prompt,
+        content: enhancedPrompt,
       });
     }
+
+    console.log(messages);
 
     // Make API call with conversation history
     const response = await fetch(
@@ -342,7 +490,7 @@ async function callDeepSeekAPI(
           "X-Title": "TDD AI Companion",
         },
         body: JSON.stringify({
-          model: "deepseek/deepseek-r1-distill-llama-70b",
+          model: "deepseek/deepseek-r1-distill-llama-70b:free",
           messages: messages,
         }),
       }
@@ -367,5 +515,57 @@ async function callDeepSeekAPI(
   }
 }
 
+/**
+ * Automatically manages the vector index when opening different projects
+ * Clears the index when a new project is detected to avoid cross-contamination
+ */
+async function autoManageIndexForProject(context: vscode.ExtensionContext) {
+  try {
+    // Get current workspace folder
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      return; // No workspace open
+    }
+
+    // Get the current project path
+    const currentProjectPath = workspaceFolder.uri.fsPath;
+
+    // Get the previously stored project path
+    const lastIndexedProject = context.globalState.get<string>(
+      "lastIndexedProject",
+      ""
+    );
+
+    // Check if pinecone API key is set
+    const config = vscode.workspace.getConfiguration("tddAICompanion");
+    const pineconeApiKey = config.get("pineconeApiKey") as string;
+
+    if (!pineconeApiKey) {
+      // Can't do anything without the API key
+      return;
+    }
+
+    // If this is a different project than the last indexed one
+    if (lastIndexedProject && lastIndexedProject !== currentProjectPath) {
+      // Initialize RAG service
+      await ragService.initialize();
+
+      // Clear the index first
+      await ragService.clearIndex();
+
+      vscode.window.showInformationMessage(
+        "Detected new project! Cleared previous project's vector index. Use 'TDD AI: Index Codebase for RAG' to index this project."
+      );
+    }
+
+    // Store the current project path for future reference
+    await context.globalState.update("lastIndexedProject", currentProjectPath);
+  } catch (error) {
+    console.error("Error in autoManageIndexForProject:", error);
+  }
+}
+
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+  // checkAndClearIndexForNewProject(vscode.extensions.getExtension("tdd-ai-companion")?.extensionUri);
+}

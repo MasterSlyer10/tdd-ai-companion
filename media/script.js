@@ -27,6 +27,8 @@
   const suggestTestButton = document.getElementById("suggest-test-button");
   const chatMessages = document.getElementById("chat-messages");
   const suggestionsHistory = document.getElementById("suggestions-history");
+
+  const newChatButton = document.getElementById("new-chat-button");
   // const clearHistoryButton = document.getElementById("clear-history");
 
   // Initialize
@@ -119,6 +121,15 @@
       console.error("Chat input not found");
     }
 
+    // New chat button
+    newChatButton.addEventListener("click", () => {
+      if (chatMessages) {
+        chatMessages.innerHTML = "";
+      }
+      vscode.postMessage({
+        command: "newChat",
+      });
+    });
     // Clear history
     // clearHistoryButton.addEventListener("click", clearHistory);
   }
@@ -1000,12 +1011,42 @@
         if (message.history && message.history.length > 0) {
           message.history.forEach((msg) => {
             const messageElement = document.createElement("div");
-            messageElement.className = `message ${msg.type}-message`;
-            messageElement.innerHTML = `
-                <div class="message-content">${msg.content}</div>
-              `;
+            // Use role instead of type to determine the message class
+            messageElement.className = `message ${
+              msg.role === "user" ? "user" : "ai"
+            }-message`;
+
+            // Add avatar
+            const avatarElement = document.createElement("div");
+            avatarElement.className = "message-avatar";
+            avatarElement.innerHTML =
+              msg.role === "user"
+                ? '<i class="codicon codicon-account"></i>'
+                : '<i class="codicon codicon-beaker"></i>';
+            messageElement.appendChild(avatarElement);
+
+            // Add content with proper formatting for assistant messages
+            const contentElement = document.createElement("div");
+            contentElement.className = "message-content";
+
+            if (msg.role === "assistant" && typeof marked !== "undefined") {
+              contentElement.innerHTML = marked.parse(msg.content);
+              // Enable syntax highlighting if Prism is available
+              if (typeof Prism !== "undefined") {
+                contentElement.querySelectorAll("pre code").forEach((block) => {
+                  Prism.highlightElement(block);
+                });
+              }
+            } else {
+              contentElement.textContent = msg.content;
+            }
+
+            messageElement.appendChild(contentElement);
             chatMessages.appendChild(messageElement);
           });
+
+          // Scroll to bottom
+          chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         break;
       case "loadCheckedItems":
@@ -1020,6 +1061,9 @@
             }
           });
         }
+        break;
+      case "clearChatUI":
+        chatMessages.innerHTML = "";
         break;
     }
   });
