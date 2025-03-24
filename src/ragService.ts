@@ -96,7 +96,7 @@ export class RAGService {
    */
   public async retrieveRelevantCode(
     query: string,
-    maxResults: number = 10
+    maxResults: number = 15
   ): Promise<CodeChunk[]> {
     try {
       return await this.embeddingService.querySimilarChunks(query, maxResults);
@@ -228,7 +228,7 @@ export class RAGService {
     return `Task: You are a TDD agent. Your task is to analyze the given code and suggest essential test cases to verify correctness. Your response should:
 - Clearly state what needs to be tested
 - Provide a brief reason why each test is necessary
-- Include example inputs and expected outputs where appropriate
+- NOTE: DO NOT write the actual test cases, just describe them.
 
 Below is the provided codebase information:
 \`\`\`json

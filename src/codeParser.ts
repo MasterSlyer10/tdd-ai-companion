@@ -237,52 +237,282 @@ function parseGenericCode(filePath: string, content: string): CodeChunk[] {
   const fileName = path.basename(filePath);
   const extension = path.extname(filePath).toLowerCase();
 
-  // Common patterns to identify functions/methods across different languages
-  const functionPatterns: { [key: string]: RegExp[] } = {
+  const functionPatterns: { [key: string]: { functions: RegExp[]; classes: RegExp[] } } = {
     // Generic patterns
-    generic: [
-      /\b(?:function|def|func|fn|sub|method|procedure)\s+([a-zA-Z0-9_]+)\s*\([^)]*\)/,
-      /\b(?:public|private|protected|static|final)\s+(?:[\w<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)/,
-    ],
+    generic: {
+      functions: [
+        /\b(?:function|def|func|fn|sub|method|procedure)\s+([a-zA-Z0-9_]+)\s*\([^)]*\)/,
+        /\b(?:public|private|protected|static|final)\s+(?:[\w<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)/,
+      ],
+      classes: [
+        /\bclass\s+([a-zA-Z0-9_]+)(?:\s+(?:extends|implements)\s+[a-zA-Z0-9_,\s<>]+)?\s*\{?/,
+      ],
+    },
     // Python
-    ".py": [
-      /\bdef\s+([a-zA-Z0-9_]+)\s*\([^)]*\):/,
-      /\bclass\s+([a-zA-Z0-9_]+)\s*(?:\([^)]*\))?:/,
-    ],
+    ".py": {
+      functions: [/\bdef\s+([a-zA-Z0-9_]+)\s*\([^)]*\):/],
+      classes: [/\bclass\s+([a-zA-Z0-9_]+)\s*(?:\([^)]*\))?:/],
+    },
     // Java
-    ".java": [
-      /\b(?:public|private|protected|static|final|abstract)?\s*(?:[\w<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?:throws\s+[\w,\s]+)?\s*\{/,
-    ],
+    ".java": {
+      functions: [
+        /\b(?:public|private|protected|static|final|abstract)?\s*(?:[\w<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*\([^)]*\)\s*(?:throws\s+[\w,\s]+)?\s*\{/,
+      ],
+      classes: [
+        /\b(?:public|private|protected)?\s*(?:abstract|final)?\s*class\s+([a-zA-Z0-9_]+)(?:\s+(?:extends|implements)\s+[a-zA-Z0-9_,\s<>]+)?\s*\{/,
+      ],
+    },
     // C/C++
-    ".c": [/\b(?:[\w]+\s+)+([a-zA-Z0-9_]+)\s*\([^;]*\)\s*\{/],
-    ".cpp": [
-      /\b(?:[\w]+\s+)+([a-zA-Z0-9_]+)\s*\([^;]*\)\s*(?:const|override|final|noexcept)?\s*\{/,
-    ],
+    ".cpp": {
+      functions: [
+        /\b(?:[\w]+\s+)+([a-zA-Z0-9_]+)\s*\([^;]*\)\s*(?:const|override|final|noexcept)?\s*\{/,
+      ],
+      classes: [
+        /\b(?:class|struct)\s+([a-zA-Z0-9_]+)(?:\s*:\s*(?:public|private|protected)\s+[a-zA-Z0-9_]+)?\s*\{/,
+      ],
+    },
     // Ruby
-    ".rb": [/\bdef\s+([a-zA-Z0-9_?!]+)(?:\([^)]*\))?/],
+    ".rb": {
+      functions: [/\bdef\s+([a-zA-Z0-9_?!]+)(?:\([^)]*\))?/],
+      classes: [/\bclass\s+([a-zA-Z0-9_]+)(?:\s*<\s*[a-zA-Z0-9_:]+)?/],
+    },
   };
 
   // Choose patterns based on file extension or fall back to generic
   const patterns = functionPatterns[extension] || functionPatterns.generic;
 
-  // Initialize variables to track potential functions
-  let currentFunction: CodeChunk | null = null;
-  let bracketCount = 0;
-  let inFunction = false;
-  let potentialFunctionStartLine = 0;
+  // If this is a Python file, use the Python-specific approach
+  if (extension === ".py" || extension === ".pyw") {
+    return parsePythonCode(filePath, content, patterns);
+  }
 
-  // Loop through lines to identify functions
+  // Initialize variables to track potential functions and classes
+  let currentChunk: CodeChunk | null = null;
+  let bracketCount = 0;
+  let inChunk = false;
+  let potentialStartLine = 0;
+
+  // Loop through lines to identify functions and classes
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineIndex = i + 1;
 
-    // Check for function definition patterns
-    if (!inFunction) {
-      for (const pattern of patterns) {
+    // Check for class or function definition patterns when not already tracking a chunk
+    if (!inChunk) {
+      // First check for class patterns
+      let isClass = false;
+      for (const pattern of patterns.classes) {
         const match = line.match(pattern);
         if (match) {
-          const functionName = match[1] || `${fileName}_chunk_${lineIndex}`;
-          potentialFunctionStartLine = lineIndex;
+          const className = match[1] || `${fileName}_class_${lineIndex}`;
+          potentialStartLine = lineIndex;
+          currentChunk = {
+            id: `${filePath}:${className}:${lineIndex}`,
+            content: line,
+            filePath,
+            startLine: lineIndex,
+            endLine: lineIndex,
+            type: "class",
+            name: className,
+          };
+          inChunk = true;
+          isClass = true;
+          bracketCount = (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+          break;
+        }
+      }
+
+      // If no class was found, check for function patterns
+      if (!isClass) {
+        for (const pattern of patterns.functions) {
+          const match = line.match(pattern);
+          if (match) {
+            const functionName = match[1] || `${fileName}_function_${lineIndex}`;
+            potentialStartLine = lineIndex;
+            currentChunk = {
+              id: `${filePath}:${functionName}:${lineIndex}`,
+              content: line,
+              filePath,
+              startLine: lineIndex,
+              endLine: lineIndex,
+              type: "function",
+              name: functionName,
+            };
+            inChunk = true;
+            bracketCount = (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+
+            // Handle one-line functions
+            if (bracketCount === 0 && line.includes("{") && line.includes("}")) {
+              chunks.push(currentChunk);
+              currentChunk = null;
+              inChunk = false;
+            }
+            break;
+          }
+        }
+      }
+    } else {
+      // Already tracking a chunk, add the line to it
+      if (currentChunk) {
+        currentChunk.content += "\n" + line;
+        currentChunk.endLine = lineIndex;
+      }
+
+      // Update bracket count
+      bracketCount += (line.match(/{/g) || []).length;
+      bracketCount -= (line.match(/}/g) || []).length;
+
+      // If brackets are balanced, we've reached the end of the chunk
+      if (bracketCount <= 0) {
+        if (currentChunk) {
+          chunks.push(currentChunk);
+        }
+        currentChunk = null;
+        inChunk = false;
+      }
+    }
+  }
+
+  // Add the last chunk if we're still tracking one
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  // If no chunks were detected, create chunks based on logical sections
+  if (chunks.length === 0) {
+    return createDefaultChunks(filePath, content);
+  }
+
+  return chunks;
+}
+
+/**
+ * Special handling for Python's indentation-based syntax
+ */
+function parsePythonCode(
+  filePath: string, 
+  content: string, 
+  patterns: { functions: RegExp[]; classes: RegExp[] }
+): CodeChunk[] {
+  const chunks: CodeChunk[] = [];
+  const lines = content.split("\n");
+  const fileName = path.basename(filePath);
+  
+  // Track classes and functions separately with their indentation levels
+  let currentClass: CodeChunk | null = null;
+  let currentFunction: CodeChunk | null = null;
+  let classIndentation = -1;
+  let functionIndentation = -1;
+  
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineIndex = i + 1;
+    
+    // Skip empty lines or comment-only lines, but still add them to current chunks
+    if (!line.trim() || line.trim().startsWith('#')) {
+      if (currentFunction) {
+        currentFunction.content += "\n" + line;
+        currentFunction.endLine = lineIndex;
+      } else if (currentClass) {
+        currentClass.content += "\n" + line;
+        currentClass.endLine = lineIndex;
+      }
+      continue;
+    }
+    
+    // Calculate the indentation level of the current line
+    const indentation = line.search(/\S|$/);
+    
+    // Check if we're exiting a function based on indentation
+    if (currentFunction && indentation <= functionIndentation) {
+      // Function has ended - add it to our chunks
+      chunks.push(currentFunction);
+      currentFunction = null;
+      functionIndentation = -1;
+    }
+    
+    // Check if we're exiting a class based on indentation
+    if (currentClass && !currentFunction && indentation <= classIndentation) {
+      // Class has ended - add it to our chunks
+      chunks.push(currentClass);
+      currentClass = null;
+      classIndentation = -1;
+    }
+    
+    // Handle line content based on context
+    // Case 1: We're inside a function - add line to function content
+    if (currentFunction) {
+      currentFunction.content += "\n" + line;
+      currentFunction.endLine = lineIndex;
+      continue;
+    }
+    
+    // Case 2: We're inside a class but not in a function - check if this is a method definition
+    if (currentClass && !currentFunction) {
+      // First, update the class content and endLine
+      currentClass.content += "\n" + line;
+      currentClass.endLine = lineIndex;
+      
+      // Check if this line defines a method
+      let isMethod = false;
+      for (const pattern of patterns.functions) {
+        const match = line.match(pattern);
+        if (match && indentation > classIndentation) {
+          isMethod = true;
+          const methodName = match[1] || `method_${lineIndex}`;
+          const className = currentClass.name;
+          
+          currentFunction = {
+            id: `${filePath}:${className}.${methodName}:${lineIndex}`,
+            content: line,
+            filePath,
+            startLine: lineIndex,
+            endLine: lineIndex,
+            type: "method", // This is a method, not a standalone function
+            name: `${className}.${methodName}`,
+          };
+          
+          functionIndentation = indentation;
+          break;
+        }
+      }
+      
+      continue; // Continue to next line regardless of whether this was a method or not
+    }
+    
+    // Case 3: Not in a class or function - check for class definition first
+    if (!currentClass && !currentFunction) {
+      let foundClass = false;
+      for (const pattern of patterns.classes) {
+        const match = line.match(pattern);
+        if (match) {
+          foundClass = true;
+          const className = match[1] || `${fileName}_class_${lineIndex}`;
+          
+          currentClass = {
+            id: `${filePath}:${className}:${lineIndex}`,
+            content: line,
+            filePath,
+            startLine: lineIndex,
+            endLine: lineIndex,
+            type: "class",
+            name: className,
+          };
+          
+          classIndentation = indentation;
+          break;
+        }
+      }
+      
+      if (foundClass) continue;
+      
+      // Case 4: Not in a class and no class definition found - check for function
+      for (const pattern of patterns.functions) {
+        const match = line.match(pattern);
+        if (match) {
+          const functionName = match[1] || `${fileName}_function_${lineIndex}`;
+          
           currentFunction = {
             id: `${filePath}:${functionName}:${lineIndex}`,
             content: line,
@@ -292,52 +522,34 @@ function parseGenericCode(filePath: string, content: string): CodeChunk[] {
             type: "function",
             name: functionName,
           };
-          inFunction = true;
-          bracketCount =
-            (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
-
-          // If the line contains opening and closing bracket, it might be a one-line function
-          if (bracketCount === 0 && line.includes("{") && line.includes("}")) {
-            chunks.push(currentFunction);
-            currentFunction = null;
-            inFunction = false;
-          }
-
+          
+          functionIndentation = indentation;
           break;
         }
       }
-    } else {
-      // Already tracking a function, add the line to it
-      if (currentFunction) {
-        currentFunction.content += "\n" + line;
-        currentFunction.endLine = lineIndex;
-      }
-
-      // Update bracket count
-      bracketCount += (line.match(/{/g) || []).length;
-      bracketCount -= (line.match(/}/g) || []).length;
-
-      // If brackets are balanced, we've reached the end of the function
-      if (bracketCount <= 0) {
-        if (currentFunction) {
-          chunks.push(currentFunction);
-        }
-        currentFunction = null;
-        inFunction = false;
-      }
     }
   }
-
-  // Add the last function if we're still tracking one
+  
+  // Add any remaining chunks
   if (currentFunction) {
     chunks.push(currentFunction);
   }
-
-  // If no functions were detected, create chunks based on logical sections
+  
+  if (currentClass) {
+    chunks.push(currentClass);
+  }
+  
+  // If no chunks were detected, create chunks based on logical sections
   if (chunks.length === 0) {
     return createDefaultChunks(filePath, content);
   }
-
+  
+  // Post-process to ensure we didn't miss anything and to debug
+  console.log(`Python parsing for ${filePath} resulted in ${chunks.length} chunks:`);
+  chunks.forEach((chunk, index) => {
+    console.log(`  [${index}] ${chunk.type} "${chunk.name}" (lines ${chunk.startLine}-${chunk.endLine})`);
+  });
+  
   return chunks;
 }
 
