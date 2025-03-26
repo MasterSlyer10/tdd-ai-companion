@@ -41,7 +41,6 @@ export function activate(context: vscode.ExtensionContext) {
       // Check if setup was done
       if (
         sidebarProvider.getSourceFiles().length === 0 ||
-        sidebarProvider.getTestFiles().length === 0 ||
         !sidebarProvider.getCurrentFeature()
       ) {
         vscode.window.showErrorMessage("Please complete the setup first.");
