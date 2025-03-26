@@ -225,15 +225,23 @@ export class RAGService {
 
     // Format the final prompt with JSON
     // ADD QUERY BACK IN PLEASE DONT FORGET JOSEPH
-    return `Task: You are a TDD agent. Your task is to analyze the given code and suggest essential test cases to verify correctness. Your response should:
-- Clearly state what needs to be tested
-- Provide a brief reason why each test is necessary
-- NOTE: DO NOT write the actual test cases, just describe them.
+    return `Task: Don't send code or JSON. 
+    You are a TDD agent. 
+    Your task is to analyze the given code and suggest one essential test case to verify correctness. 
+    Your response should: Clearly state what needs to be tested. 
+    Provide a brief reason why this test is necessary. 
+    Include an example input and expected output. 
+    Constraints: Only suggest one test case per response. 
+    Focus on a specific functionality or edge case. 
+    Do not include code, only a natural language description. 
 
-Below is the provided codebase information:
-\`\`\`json
-${JSON.stringify(codebaseJson, null, 2)}
-\`\`\``;
+    Query: Based on the given authentication-related codebase, 
+    what is one essential test case to ensure correctness beyond basic login functionality?
+
+    Below is the provided codebase information:
+    \`\`\`json
+    ${JSON.stringify(codebaseJson, null, 2)}
+    \`\`\``;
   }
 
   /**

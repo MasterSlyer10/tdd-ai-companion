@@ -412,6 +412,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             <link href="${styleUri}" rel="stylesheet">
             <link href="${codiconUri}" rel="stylesheet">
             <title>TDD AI Companion</title>
+
+            <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/themes/prism.css">
+            <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/prism.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/components/prism-javascript.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/components/prism-typescript.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/components/prism-python.min.js"></script>
         </head>
         <body>
             <header class="app-header">
@@ -457,14 +464,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                         </div>
 
                         <div class="selection-summary">
+
+                            
                             <div class="selection-section">
                                 <h4><i class="codicon codicon-file-code"></i> Source Files</h4>
                                 <div id="source-files" class="chip-container">None selected</div>
                             </div>
+                            
+                            <!--
                             <div class="selection-section">
                                 <h4><i class="codicon codicon-beaker"></i> Test Files</h4>
                                 <div id="test-files" class="chip-container">None selected</div>
                             </div>
+                            -->
                         </div>
                     </div>
                 </section>

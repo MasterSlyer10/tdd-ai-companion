@@ -66,6 +66,16 @@
     "configuration": {
       "title": "TDD AI Companion",
       "properties": {
+        "tddAICompanion.customLLMEndpoint": {
+          "type": "string",
+          "default": "http://localhost:8000/generate",
+          "description": "Custom LLM API endpoint URL (for local/self-hosted models)"
+        },
+        "tddAICompanion.useCustomLLM": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use custom LLM endpoint instead of OpenRouter"
+        },
         "tddAICompanion.openRouterApiKey": {
           "type": "string",
           "default": "",
@@ -80,6 +90,11 @@
           "type": "string",
           "default": "",
           "description": "API key for Pinecone vector database"
+        },
+        "tddAICompanion.userId": {
+          "type": "string",
+          "default": "",
+          "description": "Unique identifier for the user (automatically generated if not set)"
         }
       }
     }

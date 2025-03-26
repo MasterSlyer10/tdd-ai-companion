@@ -204,12 +204,12 @@
       <span class="toggle-label"><i class="codicon codicon-file-code"></i> Source Files</span>
     `;
 
-    const testToggle = document.createElement("label");
-    testToggle.className = "toggle-control";
-    testToggle.innerHTML = `
-      <input type="checkbox" id="test-toggle">
-      <span class="toggle-label"><i class="codicon codicon-beaker"></i> Test Files</span>
-    `;
+    // const testToggle = document.createElement("label");
+    // testToggle.className = "toggle-control";
+    // testToggle.innerHTML = `
+    //   <input type="checkbox" id="test-toggle">
+    //   <span class="toggle-label"><i class="codicon codicon-beaker"></i> Test Files</span>
+    // `;
 
     selectionControls.appendChild(sourceToggle);
     selectionControls.appendChild(testToggle);
@@ -315,22 +315,23 @@
 
     if (isSourceFile) {
       const indicator = document.createElement("i");
-      indicator.className =
-        "codicon codicon-symbol-property tree-item-indicator";
+
+      // Removed class
+      indicator.className = "codicon tree-item-indicator";
       indicator.style.marginLeft = "4px";
       indicator.style.fontSize = "12px";
       indicator.style.color = "var(--primary-color)";
       itemElement.appendChild(indicator);
     }
 
-    if (isTestFile) {
-      const indicator = document.createElement("i");
-      indicator.className = "codicon codicon-beaker tree-item-indicator";
-      indicator.style.marginLeft = "4px";
-      indicator.style.fontSize = "12px";
-      indicator.style.color = "#b05800";
-      itemElement.appendChild(indicator);
-    }
+    // if (isTestFile) {
+    //   const indicator = document.createElement("i");
+    //   indicator.className = "codicon codicon-beaker tree-item-indicator";
+    //   indicator.style.marginLeft = "4px";
+    //   indicator.style.fontSize = "12px";
+    //   indicator.style.color = "#b05800";
+    //   itemElement.appendChild(indicator);
+    // }
 
     // Add click handlers
     itemElement.addEventListener("click", (e) => {
@@ -386,7 +387,6 @@
     // Apply to children if it's a directory
     if (node.type === "directory" && node.children) {
       updateChildCheckboxes(node, isChecked);
-      return; // Don't process directories as files
     }
 
     // Only process individual files for source/test designation
@@ -395,46 +395,46 @@
       const testToggle = document.getElementById("test-toggle");
 
       // Handle source files
-      if (sourceToggle && sourceToggle.checked) {
-        if (isChecked) {
-          // Add to source files if not already there
-          if (!sourceFiles.includes(node.path)) {
-            vscode.postMessage({
-              command: "selectSourceFile",
-              path: node.path,
-            });
-          }
-        } else {
-          // Remove from source files
-          if (sourceFiles.includes(node.path)) {
-            vscode.postMessage({
-              command: "deselectSourceFile",
-              path: node.path,
-            });
-          }
+      // if (sourceToggle && sourceToggle.checked) {
+      if (isChecked) {
+        // Add to source files if not already there
+        if (!sourceFiles.includes(node.path)) {
+          vscode.postMessage({
+            command: "selectSourceFile",
+            path: node.path,
+          });
+        }
+      } else {
+        // Remove from source files
+        if (sourceFiles.includes(node.path)) {
+          vscode.postMessage({
+            command: "deselectSourceFile",
+            path: node.path,
+          });
         }
       }
+      // }
 
       // Handle test files
-      if (testToggle && testToggle.checked) {
-        if (isChecked) {
-          // Add to test files if not already there
-          if (!testFiles.includes(node.path)) {
-            vscode.postMessage({
-              command: "selectTestFile",
-              path: node.path,
-            });
-          }
-        } else {
-          // Remove from test files
-          if (testFiles.includes(node.path)) {
-            vscode.postMessage({
-              command: "deselectTestFile",
-              path: node.path,
-            });
-          }
-        }
-      }
+      // if (testToggle && testToggle.checked) {
+      //   if (isChecked) {
+      //     // Add to test files if not already there
+      //     if (!testFiles.includes(node.path)) {
+      //       vscode.postMessage({
+      //         command: "selectTestFile",
+      //         path: node.path,
+      //       });
+      //     }
+      //   } else {
+      //     // Remove from test files
+      //     if (testFiles.includes(node.path)) {
+      //       vscode.postMessage({
+      //         command: "deselectTestFile",
+      //         path: node.path,
+      //       });
+      //     }
+      //   }
+      // }
     }
 
     // Save checked items to state
@@ -462,46 +462,46 @@
         const testToggle = document.getElementById("test-toggle");
 
         // Handle source files
-        if (sourceToggle && sourceToggle.checked) {
-          if (isChecked) {
-            // Add to source files if not already there
-            if (!sourceFiles.includes(child.path)) {
-              vscode.postMessage({
-                command: "selectSourceFile",
-                path: child.path,
-              });
-            }
-          } else {
-            // Remove from source files
-            if (sourceFiles.includes(child.path)) {
-              vscode.postMessage({
-                command: "deselectSourceFile",
-                path: child.path,
-              });
-            }
+        // if (sourceToggle && sourceToggle.checked) {
+        if (isChecked) {
+          // Add to source files if not already there
+          if (!sourceFiles.includes(child.path)) {
+            vscode.postMessage({
+              command: "selectSourceFile",
+              path: child.path,
+            });
+          }
+        } else {
+          // Remove from source files
+          if (sourceFiles.includes(child.path)) {
+            vscode.postMessage({
+              command: "deselectSourceFile",
+              path: child.path,
+            });
           }
         }
+        // }
 
         // Handle test files
-        if (testToggle && testToggle.checked) {
-          if (isChecked) {
-            // Add to test files if not already there
-            if (!testFiles.includes(child.path)) {
-              vscode.postMessage({
-                command: "selectTestFile",
-                path: child.path,
-              });
-            }
-          } else {
-            // Remove from test files
-            if (testFiles.includes(child.path)) {
-              vscode.postMessage({
-                command: "deselectTestFile",
-                path: child.path,
-              });
-            }
-          }
-        }
+        // if (testToggle && testToggle.checked) {
+        //   if (isChecked) {
+        //     // Add to test files if not already there
+        //     if (!testFiles.includes(child.path)) {
+        //       vscode.postMessage({
+        //         command: "selectTestFile",
+        //         path: child.path,
+        //       });
+        //     }
+        //   } else {
+        //     // Remove from test files
+        //     if (testFiles.includes(child.path)) {
+        //       vscode.postMessage({
+        //         command: "deselectTestFile",
+        //         path: child.path,
+        //       });
+        //     }
+        //   }
+        // }
       }
 
       // Recursively update if it's a directory
@@ -807,12 +807,34 @@
 
     // For AI messages, use marked to render markdown
     if (!isUser && typeof marked !== "undefined") {
-      contentElement.innerHTML = marked.parse(content);
-      // Enable syntax highlighting if Prism is available
-      if (typeof Prism !== "undefined") {
-        contentElement.querySelectorAll("pre code").forEach((block) => {
-          Prism.highlightElement(block);
+      try {
+        // Configure marked options for better rendering
+        marked.setOptions({
+          highlight: function (code, lang) {
+            if (Prism.languages[lang]) {
+              return Prism.highlight(code, Prism.languages[lang], lang);
+            }
+            return code;
+          },
+          breaks: true,
+          gfm: true,
         });
+
+        // Parse markdown to HTML
+        contentElement.innerHTML = marked.parse(content);
+
+        // Apply additional styling for better readability
+        setTimeout(() => {
+          // Apply highlighting to code blocks
+          if (typeof Prism !== "undefined") {
+            contentElement.querySelectorAll("pre code").forEach((block) => {
+              Prism.highlightElement(block);
+            });
+          }
+        }, 0);
+      } catch (e) {
+        console.error("Error rendering markdown:", e);
+        contentElement.textContent = content;
       }
     } else {
       contentElement.textContent = content;
@@ -950,10 +972,16 @@
       )
       .map((msg) => {
         const isUser = msg.classList.contains("user-message");
-        const content = msg.querySelector(".message-content").textContent;
+        const contentEl = msg.querySelector(".message-content");
+
+        // For assistant messages, get the original HTML to preserve markdown
+        const content = isUser ? contentEl.textContent : contentEl.innerHTML;
+
         return {
           role: isUser ? "user" : "assistant",
           content: content,
+          // Add a flag to indicate this content contains HTML
+          contentType: isUser ? "text" : "html",
         };
       });
 
@@ -1011,7 +1039,6 @@
         if (message.history && message.history.length > 0) {
           message.history.forEach((msg) => {
             const messageElement = document.createElement("div");
-            // Use role instead of type to determine the message class
             messageElement.className = `message ${
               msg.role === "user" ? "user" : "ai"
             }-message`;
@@ -1029,13 +1056,31 @@
             const contentElement = document.createElement("div");
             contentElement.className = "message-content";
 
-            if (msg.role === "assistant" && typeof marked !== "undefined") {
-              contentElement.innerHTML = marked.parse(msg.content);
-              // Enable syntax highlighting if Prism is available
-              if (typeof Prism !== "undefined") {
-                contentElement.querySelectorAll("pre code").forEach((block) => {
-                  Prism.highlightElement(block);
-                });
+            // Check if content is HTML (from assistant) or plain text
+            if (msg.role === "assistant") {
+              // If we have the contentType flag or it's an assistant message
+              if (msg.contentType === "html" || typeof marked !== "undefined") {
+                // First try using the content directly as HTML (for saved HTML content)
+                contentElement.innerHTML = msg.content;
+
+                // If content doesn't look like HTML, try parsing it as markdown
+                if (
+                  !msg.content.includes("<") &&
+                  typeof marked !== "undefined"
+                ) {
+                  contentElement.innerHTML = marked.parse(msg.content);
+                }
+
+                // Apply syntax highlighting
+                if (typeof Prism !== "undefined") {
+                  contentElement
+                    .querySelectorAll("pre code")
+                    .forEach((block) => {
+                      Prism.highlightElement(block);
+                    });
+                }
+              } else {
+                contentElement.textContent = msg.content;
               }
             } else {
               contentElement.textContent = msg.content;

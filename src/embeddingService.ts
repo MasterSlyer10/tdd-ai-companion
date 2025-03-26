@@ -1,4 +1,4 @@
-import { CodeChunk } from "./codeParser";
+import { CodeChunk, parseFilesIntoChunks, SUPPORTED_EXTENSIONS } from "./codeParser";
 import * as vscode from "vscode";
 import { Pinecone } from "@pinecone-database/pinecone";
 import fetch from "node-fetch";
@@ -21,11 +21,22 @@ export class EmbeddingService {
   private pineconeClient: Pinecone | null = null;
   private indexName: string = "tdd-ai-companion";
   private projectId: string = ""; // Will be set to workspace name
+  private userId: string = ""; // User ID for namespace separation
   private initialized: boolean = false;
-  private dimension: number = 1024; // Dimension for llama-text-embed-v2 model (corrected from 4096 to 1024)
+  private dimension: number = 1024; // Dimension for llama-text-embed-v2 model
   private indexCreated: boolean = false;
+  private isIndexing: boolean = false;
+  private lastIndexedProject: string = "";
 
   constructor() {}
+
+  /**
+   * Sanitize a string to be used in Pinecone index names
+   * Only allows lowercase alphanumeric characters and hyphens
+   */
+  private sanitizeForPinecone(str: string): string {
+    return str.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  }
 
   /**
    * Initialize the embedding service with Pinecone
@@ -51,8 +62,29 @@ export class EmbeddingService {
       // Get workspace folder name to use as projectId
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (workspaceFolder) {
-        this.projectId = workspaceFolder.name;
+        this.projectId = this.sanitizeForPinecone(workspaceFolder.name);
       }
+
+      // Get user ID from VS Code settings or generate one
+      this.userId = config.get("userId") as string;
+      if (!this.userId) {
+        // Generate a unique user ID if not set
+        const timestamp = Date.now().toString(36);
+        const random = Math.random().toString(36).substr(2, 9);
+        this.userId = `user-${timestamp}-${random}`;
+        // Sanitize the user ID
+        this.userId = this.sanitizeForPinecone(this.userId);
+        // Save the generated ID to settings
+        await config.update("userId", this.userId, true);
+      } else {
+        // Sanitize existing user ID
+        this.userId = this.sanitizeForPinecone(this.userId);
+      }
+
+      // Update index name to include user ID
+      this.indexName = `tdd-ai-companion-${this.userId}`;
+      // Ensure the index name is valid
+      this.indexName = this.sanitizeForPinecone(this.indexName);
 
       // Get a sample embedding to confirm the actual dimension before creating the index
       try {
@@ -318,18 +350,9 @@ export class EmbeddingService {
           console.log(`Successfully generated embeddings for batch`);
 
           // Create vectors with metadata for upserting
-          // Handle embeddings based on EmbeddingsList structure
           if (!embeddings.data || embeddings.data.length === 0) {
             console.error("No embeddings returned from Pinecone");
             continue;
-          }
-
-          // Check if there's a dimension mismatch between the first embedding and index
-          if (embeddings.data[0] && 'values' in embeddings.data[0]) {
-            const firstEmbedLength = (embeddings.data[0].values as number[]).length;
-            if (firstEmbedLength !== this.dimension) {
-              console.warn(`Batch embedding dimension (${firstEmbedLength}) does not match index dimension (${this.dimension})`);
-            }
           }
 
           // Create vectors for upserting, handling both sparse and dense embeddings
@@ -357,8 +380,11 @@ export class EmbeddingService {
               }
             }
             
+            // Add user ID to the vector ID and metadata
+            const vectorId = `${this.userId}_${chunk.id}`;
+            
             return {
-              id: chunk.id,
+              id: vectorId,
               values: embeddingValues,
               metadata: {
                 content: chunk.content.slice(0, 1000), // Limit metadata size
@@ -367,6 +393,8 @@ export class EmbeddingService {
                 endLine: chunk.endLine,
                 type: chunk.type,
                 name: chunk.name,
+                userId: this.userId,
+                projectId: this.projectId,
               },
             };
           }).filter(vector => vector !== null);
@@ -412,6 +440,79 @@ export class EmbeddingService {
   }
 
   /**
+   * Check if the current project is already indexed
+   */
+  private async isProjectIndexed(): Promise<boolean> {
+    if (!this.pineconeClient) {
+      throw new Error("Pinecone client not initialized");
+    }
+
+    try {
+      const index = this.pineconeClient.index(this.indexName);
+      const stats = await index.describeIndexStats();
+      
+      // Check if we have any vectors and if they belong to the current project
+      if (stats.totalRecordCount && stats.totalRecordCount > 0) {
+        // Query for a single vector to check project ID
+        const queryResult = await index.query({
+          vector: new Array(this.dimension).fill(0),
+          topK: 1,
+          includeMetadata: true,
+          filter: {
+            projectId: this.projectId,
+          },
+        });
+
+        return queryResult.matches.length > 0;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error checking index status:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Automatically index the current project if needed
+   */
+  private async autoIndexIfNeeded(): Promise<void> {
+    if (this.isIndexing) {
+      return; // Already indexing
+    }
+
+    try {
+      const isIndexed = await this.isProjectIndexed();
+      if (!isIndexed) {
+        // Get all supported code files in the workspace
+        const filePattern = `**/*{${SUPPORTED_EXTENSIONS.join(",")}}`;
+        const files = await vscode.workspace.findFiles(
+          filePattern,
+          "**/node_modules/**"
+        );
+
+        if (files.length > 0) {
+          // Show progress notification
+          vscode.window.showInformationMessage(
+            "Indexing codebase for RAG functionality... This may take a few minutes."
+          );
+
+          // Parse and index the files
+          const chunks = await parseFilesIntoChunks(files);
+          if (chunks.length > 0) {
+            await this.storeCodeChunks(chunks);
+            this.lastIndexedProject = this.projectId;
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error in auto-indexing:", error);
+      vscode.window.showErrorMessage(
+        "Failed to automatically index the codebase. Please try indexing manually."
+      );
+    }
+  }
+
+  /**
    * Query similar code chunks based on a text query
    */
   public async querySimilarChunks(
@@ -430,6 +531,9 @@ export class EmbeddingService {
         throw new Error("Pinecone client not initialized");
       }
 
+      // Check if we need to index the project
+      await this.autoIndexIfNeeded();
+
       // Generate embedding for the query using the same method
       const queryEmbedding = await this.generateEmbedding(query);
 
@@ -439,6 +543,10 @@ export class EmbeddingService {
         vector: queryEmbedding,
         topK,
         includeMetadata: true,
+        filter: {
+          userId: this.userId,
+          projectId: this.projectId, // Add project ID filter
+        },
       });
 
       console.log(
@@ -447,7 +555,7 @@ export class EmbeddingService {
 
       // Convert query results back to code chunks
       return queryResult.matches.map((match) => ({
-        id: match.id,
+        id: match.id.replace(`${this.userId}_`, ''),
         content: match.metadata?.content as string,
         filePath: match.metadata?.filePath as string,
         startLine: match.metadata?.startLine as number,
@@ -465,7 +573,7 @@ export class EmbeddingService {
   }
 
   /**
-   * Delete all stored embeddings for the current workspace
+   * Clear all stored embeddings for the current workspace
    */
   public async clearWorkspaceEmbeddings(): Promise<void> {
     if (!this.initialized) {
@@ -481,9 +589,15 @@ export class EmbeddingService {
       }
 
       const index = this.pineconeClient.index(this.indexName);
-      // Use deleteAll for the whole index
-      await index.deleteAll();
+      
+      // Delete only vectors for the current project
+      await (index as any).delete({
+        filter: {
+          projectId: this.projectId,
+        },
+      });
 
+      this.lastIndexedProject = "";
       vscode.window.showInformationMessage(
         "Successfully cleared all stored code chunks for this workspace"
       );

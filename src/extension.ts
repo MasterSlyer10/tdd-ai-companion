@@ -407,6 +407,7 @@ async function callDeepSeekAPI(
 ): Promise<string> {
   // Get API key from extension settings
   const config = vscode.workspace.getConfiguration("tddAICompanion");
+  const useCustomLLM = config.get("useCustomLLM") as boolean;
   let apiKey = config.get("openRouterApiKey") as string;
 
   // For testing purposes only
@@ -478,6 +479,9 @@ async function callDeepSeekAPI(
 
     console.log(messages);
 
+    if (useCustomLLM) {
+      return await callCustomLLM(messages);
+    }
     // Make API call with conversation history
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -509,6 +513,64 @@ async function callDeepSeekAPI(
     console.error("Error calling DeepSeek API:", error);
     throw new Error(
       `Failed to get test suggestions: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
+async function callCustomLLM(messages: ChatMessage[]): Promise<string> {
+  const config = vscode.workspace.getConfiguration("tddAICompanion");
+  const endpoint = config.get("customLLMEndpoint") as string;
+
+  if (!endpoint) {
+    throw new Error(
+      "Custom LLM endpoint not configured. Please set it in the extension settings."
+    );
+  }
+
+  try {
+    console.log(`Calling custom LLM at ${endpoint}`);
+
+    // Format the request for your custom endpoint
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input_text: messages
+          .map(
+            (m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
+          )
+          .join("\n\n"),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
+
+    // Parse the custom LLM response format
+    const data = await response.json();
+    console.log("Raw response from custom LLM:", data);
+
+    // Check for the result field in the response (your API format)
+    if (data.result) {
+      return data.result;
+    }
+
+    if (data.status === "COMPLETED" && data.output && data.output.length > 0) {
+      // Extract content from the tokens
+      if (data.output[0].choices && data.output[0].choices.length > 0) {
+        return data.output[0].choices[0].tokens.join("");
+      }
+    }
+
+    throw new Error("Invalid response format from custom LLM");
+  } catch (error) {
+    console.error("Error calling custom LLM:", error);
+    throw new Error(
+      `Failed to get test suggestions from custom LLM: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
