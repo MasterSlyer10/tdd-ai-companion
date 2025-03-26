@@ -1,4 +1,8 @@
-import { CodeChunk, parseFilesIntoChunks, SUPPORTED_EXTENSIONS } from "./codeParser";
+import {
+  CodeChunk,
+  parseFilesIntoChunks,
+  SUPPORTED_EXTENSIONS,
+} from "./codeParser";
 import * as vscode from "vscode";
 import { Pinecone } from "@pinecone-database/pinecone";
 import fetch from "node-fetch";
@@ -35,7 +39,7 @@ export class EmbeddingService {
    * Only allows lowercase alphanumeric characters and hyphens
    */
   private sanitizeForPinecone(str: string): string {
-    return str.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    return str.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   }
 
   /**
@@ -45,7 +49,9 @@ export class EmbeddingService {
     try {
       // Get API key from extension settings
       const config = vscode.workspace.getConfiguration("tddAICompanion");
-      const pineconeApiKey = config.get("pineconeApiKey") as string;
+      let pineconeApiKey = config.get("pineconeApiKey") as string;
+      pineconeApiKey =
+        "pcsk_VwUfj_SVFD7oLgq8sESu4e1VxdhvQod8HPEyLDzyowSyzrtuex3ATHLPjqtzBRdZMWNsL";
 
       if (!pineconeApiKey) {
         vscode.window.showErrorMessage(
@@ -94,7 +100,10 @@ export class EmbeddingService {
         this.dimension = sampleEmbedding.length;
         console.log(`Determined embedding dimension: ${this.dimension}`);
       } catch (error) {
-        console.warn("Could not determine embedding dimension, using default:", error);
+        console.warn(
+          "Could not determine embedding dimension, using default:",
+          error
+        );
         // Continue with the default dimension
       }
 
@@ -125,25 +134,32 @@ export class EmbeddingService {
       const indexes = await this.pineconeClient.listIndexes();
 
       // Check if our index already exists
-      const existingIndex = indexes.indexes?.find((index: any) => index.name === this.indexName);
-      
+      const existingIndex = indexes.indexes?.find(
+        (index: any) => index.name === this.indexName
+      );
+
       if (existingIndex) {
         console.log(`Found existing index: ${this.indexName}`);
         // Check if dimensions match
         const indexDimension = existingIndex.dimension || 0;
         if (indexDimension !== this.dimension) {
-          console.warn(`Dimension mismatch: Index has ${indexDimension}, but model produces ${this.dimension}`);
-          
+          console.warn(
+            `Dimension mismatch: Index has ${indexDimension}, but model produces ${this.dimension}`
+          );
+
           // Ask user for permission to delete and recreate the index
           const answer = await vscode.window.showWarningMessage(
             `The dimension of your Pinecone index (${indexDimension}) doesn't match the embedding model dimension (${this.dimension}). Delete the existing index and create a new one?`,
-            'Yes', 'No'
+            "Yes",
+            "No"
           );
-          
-          if (answer === 'Yes') {
+
+          if (answer === "Yes") {
             console.log(`Deleting index: ${this.indexName}`);
             await this.pineconeClient.deleteIndex(this.indexName);
-            console.log(`Creating new index with correct dimension: ${this.dimension}`);
+            console.log(
+              `Creating new index with correct dimension: ${this.dimension}`
+            );
             await this.createIndex();
           } else {
             // User chose not to recreate the index, so we'll use the existing dimension
@@ -173,7 +189,7 @@ export class EmbeddingService {
     if (!this.pineconeClient) {
       throw new Error("Pinecone client not initialized");
     }
-    
+
     try {
       await this.pineconeClient.createIndex({
         name: this.indexName,
@@ -202,7 +218,10 @@ export class EmbeddingService {
    * @param text The text to embed
    * @param skipDimensionCheck If true, skip dimension checking (used during initialization)
    */
-  private async generateEmbedding(text: string, skipDimensionCheck: boolean = false): Promise<number[]> {
+  private async generateEmbedding(
+    text: string,
+    skipDimensionCheck: boolean = false
+  ): Promise<number[]> {
     try {
       if (!this.pineconeClient) {
         throw new Error("Pinecone client not initialized");
@@ -222,12 +241,14 @@ export class EmbeddingService {
         text.length > 8192 ? text.substring(0, 8192) + "... [truncated]" : text;
 
       // Use Pinecone's inference API to generate embeddings
-      console.log(`Using Pinecone inference with model: ${this.embeddingModel}`);
-      
+      console.log(
+        `Using Pinecone inference with model: ${this.embeddingModel}`
+      );
+
       const embeddings = await this.pineconeClient.inference.embed(
         this.embeddingModel,
         [truncatedText],
-        { inputType: 'passage', truncate: 'END' }
+        { inputType: "passage", truncate: "END" }
       );
 
       console.log(`Got embedding result:`, embeddings);
@@ -238,30 +259,40 @@ export class EmbeddingService {
         // The values property is actually on the embedding object
         const embeddingData = embeddings.data[0];
         // Handle both sparse and dense embedding types
-        if ('values' in embeddingData) {
+        if ("values" in embeddingData) {
           const embedding = embeddingData.values as number[];
           console.log(`Embedding vector length: ${embedding.length}`);
 
           // Check if dimensions match what we expect, but only if we're not skipping the check
           if (!skipDimensionCheck && embedding.length !== this.dimension) {
-            console.warn(`Embedding dimension mismatch: expected ${this.dimension}, got ${embedding.length}`);
-            
+            console.warn(
+              `Embedding dimension mismatch: expected ${this.dimension}, got ${embedding.length}`
+            );
+
             // If index is not yet created, we can adjust our dimension
             if (!this.indexCreated) {
-              console.log(`Updating dimension from ${this.dimension} to ${embedding.length}`);
+              console.log(
+                `Updating dimension from ${this.dimension} to ${embedding.length}`
+              );
               // Update our dimension to match what the API returned
               this.dimension = embedding.length;
             } else {
               // If index is already created with a different dimension, we have a problem
               // We'll need to pad or truncate the embedding to match the index dimension
-              console.warn(`Index already created with dimension ${this.dimension}, but embedding has dimension ${embedding.length}`);
+              console.warn(
+                `Index already created with dimension ${this.dimension}, but embedding has dimension ${embedding.length}`
+              );
               if (embedding.length > this.dimension) {
                 // Truncate to match index dimension
-                console.warn(`Truncating embedding from ${embedding.length} to ${this.dimension}`);
+                console.warn(
+                  `Truncating embedding from ${embedding.length} to ${this.dimension}`
+                );
                 return embedding.slice(0, this.dimension);
               } else {
                 // Pad with zeros to match index dimension
-                console.warn(`Padding embedding from ${embedding.length} to ${this.dimension}`);
+                console.warn(
+                  `Padding embedding from ${embedding.length} to ${this.dimension}`
+                );
                 const paddedEmbedding = [...embedding];
                 while (paddedEmbedding.length < this.dimension) {
                   paddedEmbedding.push(0);
@@ -273,7 +304,10 @@ export class EmbeddingService {
 
           return embedding;
         } else {
-          console.error("Received sparse embedding but expected dense embedding:", embeddingData);
+          console.error(
+            "Received sparse embedding but expected dense embedding:",
+            embeddingData
+          );
           throw new Error("Sparse embeddings are not supported");
         }
       } else {
@@ -282,17 +316,26 @@ export class EmbeddingService {
       }
     } catch (error) {
       console.error("Error generating embedding with Pinecone:", error);
-      
+
       if (error instanceof Error) {
         if (error.message.includes("404")) {
-          throw new Error("Embedding model not found. Make sure the model is available in your Pinecone tier.");
-        } else if (error.message.includes("401") || error.message.includes("403")) {
-          throw new Error("Authentication error with Pinecone API. Please check your API key.");
+          throw new Error(
+            "Embedding model not found. Make sure the model is available in your Pinecone tier."
+          );
+        } else if (
+          error.message.includes("401") ||
+          error.message.includes("403")
+        ) {
+          throw new Error(
+            "Authentication error with Pinecone API. Please check your API key."
+          );
         } else if (error.message.includes("429")) {
-          throw new Error("Rate limit exceeded for Pinecone API. Please try again later.");
+          throw new Error(
+            "Rate limit exceeded for Pinecone API. Please try again later."
+          );
         }
       }
-      
+
       // Return a zero vector as fallback in case of error
       console.warn("Using fallback zero embedding due to error");
       return new Array(this.dimension).fill(0);
@@ -335,16 +378,18 @@ export class EmbeddingService {
 
         try {
           // First generate embeddings for all chunks in the batch using Pinecone's inference API
-          console.log(`Generating embeddings for batch ${Math.floor(i / batchSize) + 1}`);
-          
+          console.log(
+            `Generating embeddings for batch ${Math.floor(i / batchSize) + 1}`
+          );
+
           // Map the chunks to only their text content for embedding
-          const batchTexts = batch.map(chunk => chunk.content);
-          
+          const batchTexts = batch.map((chunk) => chunk.content);
+
           // Generate embeddings for all texts in the batch at once
           const embeddings = await this.pineconeClient.inference.embed(
             this.embeddingModel,
             batchTexts,
-            { inputType: 'passage', truncate: 'END' }
+            { inputType: "passage", truncate: "END" }
           );
 
           console.log(`Successfully generated embeddings for batch`);
@@ -356,51 +401,61 @@ export class EmbeddingService {
           }
 
           // Create vectors for upserting, handling both sparse and dense embeddings
-          const vectors = batch.map((chunk, idx) => {
-            const embeddingData = embeddings.data[idx];
-            // Ensure this is a dense embedding with values
-            if (!('values' in embeddingData)) {
-              console.error(`Embedding for chunk ${idx} does not have values property`);
-              return null;
-            }
-            
-            let embeddingValues = embeddingData.values as number[];
-            
-            // Handle dimension mismatch
-            if (embeddingValues.length !== this.dimension) {
-              if (embeddingValues.length > this.dimension) {
-                // Truncate
-                embeddingValues = embeddingValues.slice(0, this.dimension);
-              } else {
-                // Pad with zeros
-                embeddingValues = [
-                  ...embeddingValues,
-                  ...new Array(this.dimension - embeddingValues.length).fill(0)
-                ];
+          const vectors = batch
+            .map((chunk, idx) => {
+              const embeddingData = embeddings.data[idx];
+              // Ensure this is a dense embedding with values
+              if (!("values" in embeddingData)) {
+                console.error(
+                  `Embedding for chunk ${idx} does not have values property`
+                );
+                return null;
               }
-            }
-            
-            // Add user ID to the vector ID and metadata
-            const vectorId = `${this.userId}_${chunk.id}`;
-            
-            return {
-              id: vectorId,
-              values: embeddingValues,
-              metadata: {
-                content: chunk.content.slice(0, 1000), // Limit metadata size
-                filePath: chunk.filePath,
-                startLine: chunk.startLine,
-                endLine: chunk.endLine,
-                type: chunk.type,
-                name: chunk.name,
-                userId: this.userId,
-                projectId: this.projectId,
-              },
-            };
-          }).filter(vector => vector !== null);
+
+              let embeddingValues = embeddingData.values as number[];
+
+              // Handle dimension mismatch
+              if (embeddingValues.length !== this.dimension) {
+                if (embeddingValues.length > this.dimension) {
+                  // Truncate
+                  embeddingValues = embeddingValues.slice(0, this.dimension);
+                } else {
+                  // Pad with zeros
+                  embeddingValues = [
+                    ...embeddingValues,
+                    ...new Array(this.dimension - embeddingValues.length).fill(
+                      0
+                    ),
+                  ];
+                }
+              }
+
+              // Add user ID to the vector ID and metadata
+              const vectorId = `${this.userId}_${chunk.id}`;
+
+              return {
+                id: vectorId,
+                values: embeddingValues,
+                metadata: {
+                  content: chunk.content.slice(0, 1000), // Limit metadata size
+                  filePath: chunk.filePath,
+                  startLine: chunk.startLine,
+                  endLine: chunk.endLine,
+                  type: chunk.type,
+                  name: chunk.name,
+                  userId: this.userId,
+                  projectId: this.projectId,
+                },
+              };
+            })
+            .filter((vector) => vector !== null);
 
           if (vectors.length === 0) {
-            console.warn(`No valid vectors created for batch ${Math.floor(i / batchSize) + 1}`);
+            console.warn(
+              `No valid vectors created for batch ${
+                Math.floor(i / batchSize) + 1
+              }`
+            );
             continue;
           }
 
@@ -410,7 +465,9 @@ export class EmbeddingService {
 
           // Show progress
           vscode.window.showInformationMessage(
-            `Stored ${i + batch.length}/${chunks.length} code chunks in vector database`
+            `Stored ${i + batch.length}/${
+              chunks.length
+            } code chunks in vector database`
           );
 
           // Add a small delay between batches to avoid rate limits
@@ -450,7 +507,7 @@ export class EmbeddingService {
     try {
       const index = this.pineconeClient.index(this.indexName);
       const stats = await index.describeIndexStats();
-      
+
       // Check if we have any vectors and if they belong to the current project
       if (stats.totalRecordCount && stats.totalRecordCount > 0) {
         // Query for a single vector to check project ID
@@ -555,7 +612,7 @@ export class EmbeddingService {
 
       // Convert query results back to code chunks
       return queryResult.matches.map((match) => ({
-        id: match.id.replace(`${this.userId}_`, ''),
+        id: match.id.replace(`${this.userId}_`, ""),
         content: match.metadata?.content as string,
         filePath: match.metadata?.filePath as string,
         startLine: match.metadata?.startLine as number,
@@ -589,7 +646,7 @@ export class EmbeddingService {
       }
 
       const index = this.pineconeClient.index(this.indexName);
-      
+
       // Delete only vectors for the current project
       await (index as any).delete({
         filter: {
