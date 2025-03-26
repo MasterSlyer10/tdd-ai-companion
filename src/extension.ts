@@ -176,10 +176,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       // Check if setup was done
-      if (
-        sidebarProvider.getSourceFiles().length === 0 &&
-        sidebarProvider.getTestFiles().length === 0
-      ) {
+      if (sidebarProvider.getSourceFiles().length === 0) {
         // If no files are selected, show options to select all code files
         const select = await vscode.window.showInformationMessage(
           "No files are currently selected. Would you like to index all code files in the workspace?",
