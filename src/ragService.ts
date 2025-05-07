@@ -114,6 +114,7 @@ export class RAGService {
    */
   public augmentPromptWithCodeContext(
     originalPrompt: string,
+    feature: string,
     relevantChunks: CodeChunk[]
   ): string {
     if (relevantChunks.length === 0) {
@@ -225,18 +226,30 @@ export class RAGService {
 
     // Format the final prompt with JSON
     // ADD QUERY BACK IN PLEASE DONT FORGET JOSEPH
-    return `Task: Don't send code or JSON. 
-    You are a TDD agent. 
-    Your task is to analyze the given code and suggest one essential test case to verify correctness. 
-    Your response should: Clearly state what needs to be tested. 
-    Provide a brief reason why this test is necessary. 
-    Include an example input and expected output. 
-    Constraints: Only suggest one test case per response. 
-    Focus on a specific functionality or edge case. 
-    Do not include code, only a natural language description. 
+    return `Task:
+You are a Test-Driven Development (TDD) agent. Your goal is to analyze the given code and suggest one essential test case to verify correctness.
 
-    Query: Based on the given authentication-related codebase, 
-    what is one essential test case to ensure correctness beyond basic login functionality?
+Response Requirements:
+Your response must:
+
+Clearly state what needs to be tested.
+
+Explain why this test is necessary. (Focus on correctness, security, or edge cases.)
+
+Provide an example input and expected output.
+
+Constraints:
+Only suggest one test case per response.
+
+Focus on a specific functionality or edge case. (Avoid generic tests.)
+
+Do not include any code or JSON. Only provide a clear, structured natural language description.
+
+Query:
+Based on the given authentication-related codebase, what is one essential test case to ensure correctness beyond basic login functionality?
+
+Feature: 
+${feature}
 
     Below is the provided codebase information:
     \`\`\`json

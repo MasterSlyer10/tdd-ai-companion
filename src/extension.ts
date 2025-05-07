@@ -36,7 +36,6 @@ export function activate(context: vscode.ExtensionContext) {
       // Debug
       console.log(sidebarProvider.getCurrentFeature());
       console.log(sidebarProvider.getSourceFiles());
-      console.log(sidebarProvider.getTestFiles());
 
       // Check if setup was done
       if (
@@ -445,10 +444,11 @@ async function callDeepSeekAPI(
         // Try to get relevant code chunks from the RAG service
         const relevantChunks = await ragService.retrieveRelevantCode(prompt);
         if (relevantChunks.length > 0) {
-          console.log("Retrieved relevant code chunks:", relevantChunks.length);
-          console.log("Relevant code chunks:", relevantChunks);
+          // console.log("Retrieved relevant code chunks:", relevantChunks.length);
+          // console.log("Relevant code chunks:", relevantChunks);
           enhancedPrompt = ragService.augmentPromptWithCodeContext(
             prompt,
+            sidebarProvider.getCurrentFeature(),
             relevantChunks
           );
 
