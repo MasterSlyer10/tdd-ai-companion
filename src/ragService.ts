@@ -225,9 +225,8 @@ export class RAGService {
     });
 
     // Format the final prompt with JSON
-    // ADD QUERY BACK IN PLEASE DONT FORGET JOSEPH
     return `Task:
-You are a Test-Driven Development (TDD) agent. Your goal is to analyze the given code and suggest one essential test case to verify correctness.
+You are a Test-Driven Development (TDD) agent. Your goal is to analyze the given code and suggest one essential test case to verify correctness, based on the user's query and the specified feature.
 
 Response Requirements:
 Your response must:
@@ -245,13 +244,13 @@ Focus on a specific functionality or edge case. (Avoid generic tests.)
 
 Do not include any code or JSON. Only provide a clear, structured natural language description.
 
-Query:
-Based on the given authentication-related codebase, what is one essential test case to ensure correctness beyond basic login functionality?
+User Query for the Feature:
+${originalPrompt}
 
-Feature: 
+Feature being developed:
 ${feature}
 
-    Below is the provided codebase information:
+    Relevant codebase information:
     \`\`\`json
     ${JSON.stringify(codebaseJson, null, 2)}
     \`\`\``;

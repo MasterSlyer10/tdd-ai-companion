@@ -376,9 +376,8 @@ function createTestSuggestionPrompt(
   // - Suggest test case names/descriptions that follow the project's naming pattern
   // `
 
-  return `${
-    currentFileContext ? `CURRENTLY OPEN FILE:\n${currentFileContext}\n` : ""
-  }`;
+  // Return the user's message as the base for RAG query and initial prompt
+  return userMessage;
 }
 
 // Define interface for the API response
@@ -564,11 +563,11 @@ async function callCustomLLM(messages: ChatMessage[]): Promise<string> {
 
     throw new Error("Invalid response format from custom LLM");
   } catch (error) {
-    console.error("Error calling custom LLM:", error);
+    console.error(`Error calling custom LLM at endpoint '${endpoint}':`, error);
     throw new Error(
-      `Failed to get test suggestions from custom LLM: ${
+      `Failed to get test suggestions from custom LLM at ${endpoint}: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }. Please check the endpoint configuration and network connectivity.`
     );
   }
 }

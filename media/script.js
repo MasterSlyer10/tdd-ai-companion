@@ -1,4 +1,4 @@
-(function () {
+ (function () {
   // Acquire VS Code API
   const vscode = acquireVsCodeApi();
 
@@ -10,6 +10,7 @@
   let contextMenu = null;
   let expandedFolders = new Set();
   let checkedItems = new Set();
+  let messageIdCounter = 0; // Counter for unique message IDs
 
   // DOM Elements
   const featureInput = document.getElementById("feature-input");
@@ -77,6 +78,9 @@
 
     // Tree view controls
     refreshTreeButton.addEventListener("click", () => {
+      // The refreshTreeButton now ONLY refreshes the file tree.
+      // Edit saving/handling is done by a dedicated button within the message edit UI.
+      console.log("Refreshing file tree.");
       requestWorkspaceFiles();
     });
 
@@ -787,8 +791,11 @@
 
   // Add user message to chat UI
   function addMessageToChat(content, isUser = false) {
+    const messageId = `msg-${messageIdCounter++}`; // Generate unique ID
+
     // Create message element
     const messageElement = document.createElement("div");
+    messageElement.id = messageId; // Assign ID
     messageElement.className = isUser
       ? "message user-message"
       : "message ai-message";
@@ -804,6 +811,10 @@
     // Add content
     const contentElement = document.createElement("div");
     contentElement.className = "message-content";
+
+    if (isUser) {
+      messageElement.dataset.rawText = content; // Store raw text for user messages
+    }
 
     // For AI messages, use marked to render markdown
     if (!isUser && typeof marked !== "undefined") {
@@ -834,13 +845,43 @@
         }, 0);
       } catch (e) {
         console.error("Error rendering markdown:", e);
-        contentElement.textContent = content;
+        contentElement.textContent = content; // Fallback to text
       }
     } else {
-      contentElement.textContent = content;
+      contentElement.textContent = content; // User messages are plain text
     }
-
     messageElement.appendChild(contentElement);
+
+    // Add actions container
+    const actionsElement = document.createElement("div");
+    actionsElement.className = "message-actions";
+
+    if (isUser) {
+      const editButton = document.createElement("button");
+      editButton.className = "message-action-button edit-button";
+      editButton.innerHTML = '<i class="codicon codicon-edit"></i>';
+      editButton.title = "Edit message";
+      // Use messageElement.dataset.rawText to ensure the *current* text is edited
+      editButton.onclick = () => handleEditUserMessage(messageElement, contentElement, messageElement.dataset.rawText);
+      actionsElement.appendChild(editButton);
+
+      const deleteUserButton = document.createElement("button");
+      deleteUserButton.className = "message-action-button delete-button";
+      deleteUserButton.innerHTML = '<i class="codicon codicon-trash"></i>';
+      deleteUserButton.title = "Delete message and subsequent responses";
+      deleteUserButton.onclick = () => handleDeleteUserMessage(messageElement);
+      actionsElement.appendChild(deleteUserButton);
+
+    } else { // AI message
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "message-action-button delete-button";
+      deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
+      deleteButton.title = "Delete message";
+      deleteButton.onclick = () => handleDeleteAIMessage(messageElement);
+      actionsElement.appendChild(deleteButton);
+    }
+    messageElement.appendChild(actionsElement);
+
 
     // Remove any loading indicators
     const loadingIndicators =
@@ -991,6 +1032,187 @@
     });
   }
 
+  // START - New functions for message editing and deletion
+  function handleDeleteAIMessage(aiMessageElement) {
+    if (!aiMessageElement || aiMessageElement.parentNode !== chatMessages) {
+        return;
+    }
+
+    let userMessageElement = aiMessageElement.previousElementSibling;
+    // Traverse backwards to find the closest preceding user message
+    while (userMessageElement && !userMessageElement.classList.contains('user-message')) {
+        userMessageElement = userMessageElement.previousElementSibling;
+    }
+
+    if (!userMessageElement || !userMessageElement.classList.contains('user-message')) {
+        // Could not find a preceding user message, just delete the AI message
+        chatMessages.removeChild(aiMessageElement);
+        saveChatHistory();
+        return;
+    }
+
+    const promptToResend = userMessageElement.dataset.rawText;
+    if (typeof promptToResend === 'undefined') {
+        console.error("Could not find raw text for user message to re-run.", userMessageElement);
+        // Fallback: just delete the AI message
+        chatMessages.removeChild(aiMessageElement);
+        saveChatHistory();
+        return;
+    }
+
+    // Remove the AI message
+    chatMessages.removeChild(aiMessageElement);
+    // saveChatHistory will be called after button logic or if button not added
+
+    const actionsElement = userMessageElement.querySelector('.message-actions');
+    if (actionsElement && !actionsElement.querySelector('.rerun-button')) {
+        const rerunButton = document.createElement("button");
+        rerunButton.className = "message-action-button rerun-button";
+        rerunButton.innerHTML = '<i class="codicon codicon-refresh"></i>';
+        rerunButton.title = "Re-run prompt";
+
+        rerunButton.onclick = () => {
+            // 1. Remove all messages *after* this userMessageElement
+            let nextSibling = userMessageElement.nextElementSibling;
+            while (nextSibling) {
+                const toRemove = nextSibling;
+                nextSibling = nextSibling.nextElementSibling;
+                if (chatMessages.contains(toRemove)) {
+                    chatMessages.removeChild(toRemove);
+                }
+            }
+
+            // 2. Save chat history now that subsequent messages are cleared
+            saveChatHistory();
+
+            // 3. Display loading indicator
+            const loadingElement = document.createElement("div");
+            loadingElement.className = "loading-indicator";
+            loadingElement.textContent = "Generating response..."; // Consistent with other loading texts
+            chatMessages.appendChild(loadingElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // 4. Send the message to the extension
+            vscode.postMessage({
+                command: "requestTestSuggestion",
+                message: promptToResend,
+            });
+
+            // 5. Remove the rerunButton itself after click
+            if (rerunButton.parentNode) {
+                rerunButton.parentNode.removeChild(rerunButton);
+            }
+        };
+        actionsElement.appendChild(rerunButton);
+    }
+    saveChatHistory(); // Save history after AI message deletion and potential button addition
+  }
+
+  function handleDeleteUserMessage(messageElement) {
+    if (messageElement && messageElement.parentNode === chatMessages) {
+      // Remove this message and all subsequent messages
+      let currentMsg = messageElement;
+      while (currentMsg) {
+        const nextMsg = currentMsg.nextElementSibling;
+        if (chatMessages.contains(currentMsg)) {
+          chatMessages.removeChild(currentMsg);
+        }
+        currentMsg = nextMsg;
+      }
+      saveChatHistory(); // Update the history after deletion
+    }
+  }
+
+  function handleEditUserMessage(messageElement, contentElement, originalRawContent) {
+    // Prevent editing if already in edit mode
+    if (contentElement.querySelector('textarea.edit-area')) {
+      return;
+    }
+
+    contentElement.innerHTML = ''; // Clear current content (e.g., the static text)
+
+    const editArea = document.createElement('textarea');
+    editArea.className = 'edit-area';
+    editArea.value = originalRawContent; // Use the raw text for editing
+    
+    // Auto-resize textarea
+    editArea.style.height = 'auto';
+    editArea.style.height = (editArea.scrollHeight) + 'px';
+    editArea.addEventListener('input', function () {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    const reloadAndSaveButton = document.createElement('button');
+    reloadAndSaveButton.textContent = 'Save & Resend';
+    reloadAndSaveButton.className = 'edit-action-button'; // Reuse existing class or create a new one
+    reloadAndSaveButton.title = 'Save changes, delete subsequent messages, resend, and refresh file tree';
+
+    reloadAndSaveButton.onclick = () => {
+      const newContent = editArea.value.trim();
+      if (newContent === "") {
+        alert("Message cannot be empty.");
+        return;
+      }
+
+      // 1. Update UI: Exit edit mode by replacing textarea with new text
+      contentElement.innerHTML = ''; 
+      contentElement.textContent = newContent;
+      messageElement.dataset.rawText = newContent;
+
+      // 2. Delete all subsequent messages
+      let currentMsg = messageElement.nextElementSibling;
+      while (currentMsg) {
+        const toRemove = currentMsg;
+        currentMsg = currentMsg.nextElementSibling;
+        if (chatMessages.contains(toRemove)) {
+          chatMessages.removeChild(toRemove);
+        }
+      }
+
+      // 3. Save chat history
+      saveChatHistory();
+
+      // 4. Display loading indicator and resend the edited message
+      const loadingElement = document.createElement("div");
+      loadingElement.className = "loading-indicator";
+      loadingElement.textContent = "Generating response...";
+      chatMessages.appendChild(loadingElement); // Append to main chat area
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      vscode.postMessage({
+        command: "requestTestSuggestion",
+        message: newContent,
+      });
+
+      // 5. Refresh file tree (as per original "reload" functionality)
+      requestWorkspaceFiles();
+    };
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.marginTop = '5px';
+    buttonContainer.appendChild(reloadAndSaveButton);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.className = 'edit-action-button cancel-edit-button';
+    cancelButton.title = 'Cancel editing';
+    cancelButton.onclick = () => {
+      // Restore original content and remove edit UI
+      contentElement.innerHTML = ''; // Clear textarea and buttons
+      contentElement.textContent = originalRawContent; // Restore text
+      // messageElement.dataset.rawText remains the value from before this edit attempt
+    };
+    buttonContainer.appendChild(cancelButton);
+
+    contentElement.appendChild(editArea);
+    contentElement.appendChild(buttonContainer);
+    editArea.focus();
+  }
+
+  // handleSaveUserEdit and handleCancelUserEdit are no longer needed.
+  // END - New functions for message editing and deletion
+
   // Handle messages from the extension
   window.addEventListener("message", (event) => {
     const message = event.data;
@@ -1036,9 +1258,18 @@
         break;
       case "loadChatHistory":
         chatMessages.innerHTML = ""; // Clear existing messages
+        // Reset messageIdCounter when loading history to ensure fresh IDs for the new set of messages
+        // or ensure IDs are saved/loaded if they need to be persistent across sessions.
+        // For this implementation, ephemeral IDs are fine, so resetting is not strictly needed
+        // as new messages will continue from the current counter.
+        // However, if messages were frequently reloaded without page refresh, it might be good.
+        // Let's assume it's fine for now. messageIdCounter will just keep incrementing.
+
         if (message.history && message.history.length > 0) {
           message.history.forEach((msg) => {
+            const messageId = `msg-${messageIdCounter++}`; // Generate unique ID for loaded message
             const messageElement = document.createElement("div");
+            messageElement.id = messageId;
             messageElement.className = `message ${
               msg.role === "user" ? "user" : "ai"
             }-message`;
@@ -1052,41 +1283,81 @@
                 : '<i class="codicon codicon-beaker"></i>';
             messageElement.appendChild(avatarElement);
 
-            // Add content with proper formatting for assistant messages
+            // Add content
             const contentElement = document.createElement("div");
             contentElement.className = "message-content";
 
-            // Check if content is HTML (from assistant) or plain text
-            if (msg.role === "assistant") {
-              // If we have the contentType flag or it's an assistant message
-              if (msg.contentType === "html" || typeof marked !== "undefined") {
-                // First try using the content directly as HTML (for saved HTML content)
-                contentElement.innerHTML = msg.content;
-
-                // If content doesn't look like HTML, try parsing it as markdown
-                if (
-                  !msg.content.includes("<") &&
-                  typeof marked !== "undefined"
-                ) {
-                  contentElement.innerHTML = marked.parse(msg.content);
-                }
-
-                // Apply syntax highlighting
-                if (typeof Prism !== "undefined") {
-                  contentElement
-                    .querySelectorAll("pre code")
-                    .forEach((block) => {
-                      Prism.highlightElement(block);
-                    });
-                }
-              } else {
-                contentElement.textContent = msg.content;
-              }
-            } else {
-              contentElement.textContent = msg.content;
+            if (msg.role === "user") {
+              messageElement.dataset.rawText = msg.content; // Store raw text for loaded user messages
             }
 
+            if (msg.role === "assistant") {
+              // contentType: "html" is set in saveChatHistory for AI messages
+              if (msg.contentType === "html" && msg.content && msg.content.includes("<")) {
+                contentElement.innerHTML = msg.content;
+              } else if (typeof marked !== "undefined" && msg.content) {
+                try {
+                    marked.setOptions({
+                        highlight: function (code, lang) {
+                            if (Prism.languages[lang]) {
+                                return Prism.highlight(code, Prism.languages[lang], lang);
+                            }
+                            return code;
+                        },
+                        breaks: true,
+                        gfm: true,
+                    });
+                    contentElement.innerHTML = marked.parse(msg.content);
+                } catch (e) {
+                    console.error("Error parsing markdown for loaded AI message:", e);
+                    contentElement.textContent = msg.content; // Fallback
+                }
+              } else {
+                contentElement.textContent = msg.content || ""; // Fallback if no marked or not HTML
+              }
+              // Apply syntax highlighting after innerHTML is set
+              if (typeof Prism !== "undefined") {
+                setTimeout(() => { 
+                    contentElement
+                        .querySelectorAll("pre code")
+                        .forEach((block) => {
+                            Prism.highlightElement(block);
+                        });
+                }, 0);
+              }
+            } else { // User message
+              contentElement.textContent = msg.content;
+            }
             messageElement.appendChild(contentElement);
+
+            // Add actions container
+            const actionsElement = document.createElement("div");
+            actionsElement.className = "message-actions";
+
+            if (msg.role === "user") {
+              const editButton = document.createElement("button");
+              editButton.className = "message-action-button edit-button";
+              editButton.innerHTML = '<i class="codicon codicon-edit"></i>';
+              editButton.title = "Edit message";
+              // msg.content is the raw text for user messages, which is now also in dataset.rawText
+              editButton.onclick = () => handleEditUserMessage(messageElement, contentElement, messageElement.dataset.rawText);
+              actionsElement.appendChild(editButton);
+
+              const deleteUserButton = document.createElement("button");
+              deleteUserButton.className = "message-action-button delete-button";
+              deleteUserButton.innerHTML = '<i class="codicon codicon-trash"></i>';
+              deleteUserButton.title = "Delete message and subsequent responses";
+              deleteUserButton.onclick = () => handleDeleteUserMessage(messageElement);
+              actionsElement.appendChild(deleteUserButton);
+            } else { // AI message
+              const deleteButton = document.createElement("button");
+              deleteButton.className = "message-action-button delete-button";
+              deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
+              deleteButton.title = "Delete message";
+              deleteButton.onclick = () => handleDeleteAIMessage(messageElement);
+              actionsElement.appendChild(deleteButton);
+            }
+            messageElement.appendChild(actionsElement);
             chatMessages.appendChild(messageElement);
           });
 
