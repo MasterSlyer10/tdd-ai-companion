@@ -21,6 +21,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   // Update the chat history type
   private _chatHistory: ChatMessage[] = [];
+  private _cancellationTokenSource?: vscode.CancellationTokenSource;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -164,10 +165,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           break;
 
         case "requestTestSuggestion":
+          // Dispose any existing CTS before creating a new one
+          this._cancellationTokenSource?.dispose();
+          this._cancellationTokenSource = new vscode.CancellationTokenSource();
+          
           vscode.commands.executeCommand(
             "tdd-ai-companion.suggestTestCase",
-            message.message
+            message.message,
+            this._cancellationTokenSource.token // Pass the token
           );
+          break;
+        case "cancelRequest":
+          this.cancelCurrentRequest();
           break;
         case "setupProject":
           vscode.commands.executeCommand("tdd-ai-companion.setupProject");
@@ -218,11 +227,43 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             command: "clearChatUI",
           });
           break;
+        case "openExtensionSettings":
+          vscode.commands.executeCommand('workbench.action.openSettings', 'tdd-ai-companion');
+          break;
       }
     });
     // Load workspace files initially
     this.getWorkspaceFiles();
   }
+
+  public cancelCurrentRequest() {
+    if (this._cancellationTokenSource) {
+      this._cancellationTokenSource.cancel();
+      this._cancellationTokenSource.dispose();
+      this._cancellationTokenSource = undefined;
+      if (this._view) {
+        this._view.webview.postMessage({ command: "requestCancelled" });
+        // Optionally, add a message to chat history here as well, or let webview handle it.
+        // this.addResponse("Request cancelled by user.", 0, 0); // Example if counting cancelled requests
+      }
+      console.log("Request cancellation attempted.");
+    }
+  }
+
+  // Call this method from extension.ts after a request completes or errors out
+  public finalizeRequest() {
+    if (this._cancellationTokenSource) {
+      this._cancellationTokenSource.dispose();
+      this._cancellationTokenSource = undefined;
+    }
+    // Ensure webview UI is reset if it hasn't been already (e.g. by addResponse)
+    if (this._view) {
+        // This might be redundant if addResponse or requestCancelled already reset the UI.
+        // Consider if a more specific "finalizeUI" message is needed or if current ones are sufficient.
+        // For now, let's assume addResponse/requestCancelled handle UI reset.
+    }
+  }
+
 
   public updateSourceFiles(files: vscode.Uri[]) {
     this._sourceFiles = files;
@@ -495,9 +536,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 <section class="chat-section">
                     <div class="chat-header">
                         <h2 class="section-title">Test Suggestions</h2>
-                        <button id="new-chat-button" class="action-button" title="Start a new chat">
-                            <i class="codicon codicon-new-file"></i> New Chat
-                        </button>
+                        <div class="chat-header-actions">
+                            <button id="open-settings-button" class="icon-button" title="Open Extension Settings">
+                                <i class="codicon codicon-settings-gear"></i>
+                            </button>
+                            <button id="new-chat-button" class="action-button" title="Start a new chat">
+                                <i class="codicon codicon-new-file"></i> New Chat
+                            </button>
+                        </div>
                     </div>
                     <div class="chat-container">
                         <div id="chat-messages" class="messages-container"></div>

@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Suggest Test Case Command
   const suggestTestCaseCommand = vscode.commands.registerCommand(
     "tdd-ai-companion.suggestTestCase",
-    async (userMessage: string) => {
+    async (userMessage: string, cancellationToken?: vscode.CancellationToken) => {
       console.log("[suggestTestCaseCommand] Received userMessage from sidebar:", userMessage); // Log the incoming message
       // Debug
       console.log(sidebarProvider.getCurrentFeature());
@@ -51,9 +51,31 @@ export function activate(context: vscode.ExtensionContext) {
         {
           location: vscode.ProgressLocation.Notification,
           title: "Generating test suggestions...",
-          cancellable: false,
+          cancellable: true, // Make progress cancellable, though primary cancellation is via Stop button
         },
-        async (progress) => {
+        async (progress, progressToken) => { // progressToken is from withProgress
+          // Link the progressToken with the sidebarCancellationToken if provided
+          // This allows cancelling via VS Code's progress UI as well, if desired.
+          if (cancellationToken) {
+            cancellationToken.onCancellationRequested(() => {
+              sidebarProvider.cancelCurrentRequest(); // Trigger our main cancellation
+            });
+          }
+          // Also, if progressToken is cancelled (e.g., user clicks cancel on notification)
+          progressToken.onCancellationRequested(() => {
+            sidebarProvider.cancelCurrentRequest(); // Trigger our main cancellation
+          });
+
+          const abortController = new AbortController();
+          if (cancellationToken) {
+            const disposable = cancellationToken.onCancellationRequested(() => {
+              console.log("Cancellation requested via sidebar token.");
+              abortController.abort();
+              disposable.dispose(); 
+            });
+          }
+
+
           try {
             // Add the user message to history before making the API call
             sidebarProvider.addUserMessage(userMessage);
@@ -87,11 +109,11 @@ export function activate(context: vscode.ExtensionContext) {
             const conversationHistory =
               sidebarProvider.getConversationHistory();
 
-            console.log("[suggestTestCaseCommand] Value of 'prompt' variable before calling callDeepSeekAPI:", prompt);
-            console.log("[suggestTestCaseCommand] Conversation history before calling callDeepSeekAPI:", JSON.stringify(conversationHistory, null, 2));
+            console.log("[suggestTestCaseCommand] Value of 'prompt' variable before calling callGenerativeApi:", prompt);
+            console.log("[suggestTestCaseCommand] Conversation history before calling callGenerativeApi:", JSON.stringify(conversationHistory, null, 2));
 
-            // Call the DeepSeek r1 model (callDeepSeekAPI now returns an object)
-            const { responseText, llmInputPayload } = await callDeepSeekAPI(prompt, conversationHistory);
+            // Call the Gemini API (callGenerativeApi now returns an object)
+            const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal);
             const responseTokenCount = Math.ceil(responseText.length / 4); // Estimate response token count
             
             // Estimate token count for the entire input payload sent to LLM
@@ -100,10 +122,18 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Display the response
             sidebarProvider.addResponse(responseText, responseTokenCount, totalInputTokens);
-          } catch (error) {
-            vscode.window.showErrorMessage(
-              `Error generating test suggestions: ${error}`
-            );
+          } catch (error: any) {
+            if (error.name === 'AbortError') {
+              console.log("Fetch request aborted.");
+              // SidebarProvider.cancelCurrentRequest already posts 'requestCancelled'
+              // No need to show error message for user-initiated cancellation.
+            } else {
+              vscode.window.showErrorMessage(
+                `Error generating test suggestions: ${error}`
+              );
+            }
+          } finally {
+            sidebarProvider.finalizeRequest(); // Clean up CancellationTokenSource in SidebarProvider
           }
         }
       );
@@ -391,35 +421,52 @@ function createTestSuggestionPrompt(
 interface OpenRouterResponse {
   choices: Array<{
     message: {
-      content: string;
+      content: string; // OpenAI/OpenRouter format
     };
   }>;
 }
 
+// Gemini API specific interfaces
+interface GeminiPart {
+  text: string;
+}
+
+interface GeminiContent {
+  parts: GeminiPart[];
+  role: "user" | "model";
+}
+
+interface GeminiResponseCandidate {
+  content: GeminiContent;
+  finishReason?: string;
+  index?: number;
+  safetyRatings?: Array<{ category: string; probability: string }>;
+}
+
+interface GeminiApiResponse {
+  candidates: GeminiResponseCandidate[];
+  promptFeedback?: any;
+}
+
+
+// Unified ChatMessage interface (used for history)
 interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant"; // "assistant" maps to "model" for Gemini
   content: string;
 }
 
-// This function will now use RAG for better context and return the LLM input payload
-async function callDeepSeekAPI(
+// This function will now use RAG for better context and call the Gemini API
+async function callGenerativeApi(
   prompt: string, // This is the original user query from the sidebar
-  conversationHistory: ChatMessage[] = []
-): Promise<{ responseText: string; llmInputPayload: ChatMessage[] }> {
-  // Get API key from extension settings
+  conversationHistory: ChatMessage[] = [],
+  abortSignal?: AbortSignal
+): Promise<{ responseText: string; llmInputPayload: GeminiContent[] }> { // llmInputPayload is now GeminiContent[]
   const config = vscode.workspace.getConfiguration("tddAICompanion");
-  const useCustomLLM = config.get("useCustomLLM") as boolean;
-  let apiKey = config.get("openRouterApiKey") as string;
+  const geminiApiKey = config.get("geminiApiKey") as string;
 
-  // For testing purposes only
-  if (!apiKey) {
-    apiKey =
-      "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"; // My key
-  }
-
-  if (!apiKey) {
+  if (!geminiApiKey) {
     throw new Error(
-      "OpenRouter API key not found. Please set it in extension settings."
+      "Gemini API key not found. Please set it in TDD AI Companion extension settings."
     );
   }
 
@@ -468,138 +515,61 @@ async function callDeepSeekAPI(
   console.log("--- RAG Debugging End ---");
 
   try {
-    // Create the messages array
-    const messages: ChatMessage[] = [
-      // System message can be added here if needed
-      // {
-      //   role: "system",
-      //   content:
-      //     "You are an expert Test-Driven Development (TDD) assistant...",
-      // },
-    ];
-
-    // Add conversation history
-    console.log("Original Conversation History (before adding current turn):", JSON.stringify(conversationHistory, null, 2));
-    const maxHistoryLength = 6; 
-    const recentHistory = conversationHistory.slice(-maxHistoryLength);
-    messages.push(...recentHistory);
+    // Transform conversation history and current prompt to Gemini's `contents` format
+    const contents: GeminiContent[] = conversationHistory.map(chatMessage => ({
+      role: chatMessage.role === "assistant" ? "model" : "user", // Map 'assistant' to 'model'
+      parts: [{ text: chatMessage.content }],
+    }));
 
     // Add current user's turn (with potentially enhanced prompt)
-    // Avoids duplicating the exact same message if it's the last one in history
-    const lastMessageInHistory = messages.length > 0 ? messages[messages.length - 1] : null;
-    if (!(lastMessageInHistory && lastMessageInHistory.role === "user" && lastMessageInHistory.content === enhancedPromptContent)) {
-        messages.push({
-            role: "user",
-            content: enhancedPromptContent,
-        });
-    } else {
-        console.log("[API Call] Current enhanced prompt is identical to the last user message in history, not adding duplicate to messages array.");
-    }
+    contents.push({
+      role: "user",
+      parts: [{ text: enhancedPromptContent }],
+    });
     
-    console.log("Full messages array being sent to LLM:", JSON.stringify(messages, null, 2));
+    console.log("Full 'contents' array being sent to Gemini API:", JSON.stringify(contents, null, 2));
 
-    if (useCustomLLM) {
-      // Assuming callCustomLLM might also need to return its input payload if we want to be consistent
-      // For now, let's focus on DeepSeek/OpenRouter path for token counting.
-      // If custom LLM token counting is needed, callCustomLLM should also return its input payload.
-      const customLlmResponse = await callCustomLLM(messages); 
-      return { responseText: customLlmResponse, llmInputPayload: messages };
-    }
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`;
 
-    // Make API call with conversation history
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "vscode-tdd-ai-companion",
-          "X-Title": "TDD AI Companion",
-        },
-        body: JSON.stringify({
-          model: "deepseek/deepseek-r1-distill-llama-70b:free", // Or your chosen model
-          messages: messages,
-        }),
-      }
-    );
+    const response = await fetch(geminiApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ contents }), // Send the 'contents' array
+      signal: abortSignal,
+    });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      console.error("Gemini API Error Response:", errorData);
       throw new Error(
-        `API error: ${response.status} - ${JSON.stringify(errorData)}`
+        `Gemini API error: ${response.status} - ${errorData.error?.message || JSON.stringify(errorData)}`
       );
     }
 
-    const data = (await response.json()) as OpenRouterResponse;
-    return { responseText: data.choices[0].message.content, llmInputPayload: messages };
+    const data = (await response.json()) as GeminiApiResponse;
+
+    if (!data.candidates || data.candidates.length === 0 || !data.candidates[0].content || !data.candidates[0].content.parts || data.candidates[0].content.parts.length === 0) {
+      console.error("Invalid response structure from Gemini API:", data);
+      throw new Error("Invalid or empty response from Gemini API.");
+    }
+    
+    const responseText = data.candidates[0].content.parts[0].text;
+    return { responseText, llmInputPayload: contents }; // Return the 'contents' sent as llmInputPayload
+
   } catch (error) {
-    console.error("Error calling DeepSeek API:", error);
+    console.error("Error calling Gemini API:", error);
     throw new Error(
-      `Failed to get test suggestions: ${
+      `Failed to get test suggestions from Gemini API: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
   }
 }
 
-async function callCustomLLM(messages: ChatMessage[]): Promise<string> {
-  const config = vscode.workspace.getConfiguration("tddAICompanion");
-  const endpoint = config.get("customLLMEndpoint") as string;
-
-  if (!endpoint) {
-    throw new Error(
-      "Custom LLM endpoint not configured. Please set it in the extension settings."
-    );
-  }
-
-  try {
-    console.log(`Calling custom LLM at ${endpoint}`);
-
-    // Format the request for your custom endpoint
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        input_text: messages
-          .map(
-            (m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
-          )
-          .join("\n\n"),
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API error: ${response.status} - ${errorText}`);
-    }
-
-    // Parse the custom LLM response format
-    const data = await response.json();
-    console.log("Raw response from custom LLM:", data);
-
-    // Check for the result field in the response (your API format)
-    if (data.result) {
-      return data.result;
-    }
-
-    if (data.status === "COMPLETED" && data.output && data.output.length > 0) {
-      // Extract content from the tokens
-      if (data.output[0].choices && data.output[0].choices.length > 0) {
-        return data.output[0].choices[0].tokens.join("");
-      }
-    }
-
-    throw new Error("Invalid response format from custom LLM");
-  } catch (error) {
-    console.error(`Error calling custom LLM at endpoint '${endpoint}':`, error);
-    throw new Error(
-      `Failed to get test suggestions from custom LLM at ${endpoint}: ${
-        error instanceof Error ? error.message : String(error)
-      }. Please check the endpoint configuration and network connectivity.`
-    );
-  }
-}
+// Remove callCustomLLM as it's no longer configured
+// async function callCustomLLM(messages: ChatMessage[], abortSignal?: AbortSignal): Promise<string> { ... }
 
 /**
  * Automatically manages the vector index when opening different projects

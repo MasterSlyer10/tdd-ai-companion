@@ -66,25 +66,10 @@
     "configuration": {
       "title": "TDD AI Companion",
       "properties": {
-        "tddAICompanion.customLLMEndpoint": {
-          "type": "string",
-          "default": "http://localhost:8000/generate",
-          "description": "Custom LLM API endpoint URL (for local/self-hosted models)"
-        },
-        "tddAICompanion.useCustomLLM": {
-          "type": "boolean",
-          "default": false,
-          "description": "Use custom LLM endpoint instead of OpenRouter"
-        },
-        "tddAICompanion.openRouterApiKey": {
+        "tddAICompanion.geminiApiKey": {
           "type": "string",
           "default": "",
-          "description": "API key for OpenRouter to access DeepSeek r1"
-        },
-        "tddAICompanion.openAIApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "API key for OpenAI to generate embeddings"
+          "description": "API key for Google Gemini"
         },
         "tddAICompanion.pineconeApiKey": {
           "type": "string",

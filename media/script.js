@@ -33,6 +33,7 @@
   const suggestionsHistory = document.getElementById("suggestions-history");
 
   const newChatButton = document.getElementById("new-chat-button");
+  const openSettingsButton = document.getElementById("open-settings-button");
   // const clearHistoryButton = document.getElementById("clear-history");
 
   // Initialize
@@ -40,6 +41,21 @@
     init();
     console.log("Document loaded"); // Debugging
   });
+
+  // Helper function to set the state of the send/stop button
+  function setSendButtonState(state) { // "send" or "stop"
+    if (!sendButton) return;
+    sendButton.dataset.state = state;
+    if (state === "stop") {
+      sendButton.innerHTML = '<i class="codicon codicon-debug-stop"></i> Stop';
+      sendButton.title = "Stop Generating";
+      if (chatInput) chatInput.disabled = true;
+    } else { // "send"
+      sendButton.innerHTML = '<i class="codicon codicon-send"></i>';
+      sendButton.title = "Send Request";
+      if (chatInput) chatInput.disabled = false;
+    }
+  }
 
   function init() {
     // Tells the extension when the view is ready to receive
@@ -49,6 +65,7 @@
 
     // Set up event listeners
     setupEventListeners();
+    setSendButtonState("send"); // Initial state
 
     // Set up feature input
     setupFeatureInput();
@@ -106,10 +123,7 @@
     // Chat functionality
     if (sendButton) {
       console.log("Send button found");
-      sendButton.addEventListener("click", () => {
-        console.log("Send button clicked"); // Debugging
-        sendChatMessage();
-      });
+      sendButton.addEventListener("click", handleSendOrStopClick); // Unified handler
     } else {
       console.error("Send button not found");
     }
@@ -152,7 +166,14 @@
       const tokenLimitMsg = document.getElementById("token-limit-message");
       if (tokenLimitMsg) tokenLimitMsg.remove();
       updateTokenDisplay(); // Update display after reset
+      setSendButtonState("send"); // Ensure button is in send state
     });
+
+    if (openSettingsButton) {
+      openSettingsButton.addEventListener("click", () => {
+        vscode.postMessage({ command: "openExtensionSettings" });
+      });
+    }
     // Clear history
     // clearHistoryButton.addEventListener("click", clearHistory);
   }
@@ -823,6 +844,25 @@
 
   // CHAT FUNCTIONALITY PARTS
   //
+  function handleSendOrStopClick() {
+    if (!sendButton) return;
+
+    if (sendButton.dataset.state === "stop") {
+      console.log("Stop button clicked");
+      vscode.postMessage({ command: "cancelRequest" });
+      setSendButtonState("send");
+      // Optionally, remove loading indicator and add a "cancelled" message immediately
+      const loadingIndicators = chatMessages.querySelectorAll(".loading-indicator");
+      loadingIndicators.forEach((indicator) => indicator.remove());
+      // It might be better for the extension to confirm cancellation before webview fully resets UI for loading.
+      // For now, let's assume immediate UI reversion is okay.
+      // addMessageToChat("Request cancelled by user.", false); // Consider if this message is desired
+    } else {
+      console.log("Send button clicked (from handleSendOrStopClick)");
+      sendChatMessage();
+    }
+  }
+
   function sendChatMessage() {
     // Explicitly get the element and its value again, right before sending.
     const currentChatInputElement = document.getElementById("chat-input");
@@ -860,6 +900,8 @@
     // This console.log will appear in the Webview Developer Tools console
     console.log("Webview: Sending message to extension:", message, `Current Total Tokens (before this turn): ${currentTokenCount}`);
 
+    setSendButtonState("stop"); // Change to Stop button
+
     // Add message to UI
     addMessageToChat(message, true);
 
@@ -892,6 +934,8 @@
     if (chatInput) {
       chatInput.value = predefinedMessage;
     }
+    
+    setSendButtonState("stop"); // Change to Stop button
 
     // Add message to UI
     addMessageToChat(predefinedMessage, true);
@@ -1024,6 +1068,15 @@
 
     // Save chat history
     saveChatHistory();
+  }
+
+  // This function is called when an AI response or a system message (like "cancelled") is added.
+  // It should ensure the UI (button, input) is in the correct state.
+  function finalizeChatTurn() {
+    setSendButtonState("send"); // Revert to send state
+    // chatInput.disabled = false; // This is handled by setSendButtonState
+    const loadingIndicators = chatMessages.querySelectorAll(".loading-indicator");
+    loadingIndicators.forEach((indicator) => indicator.remove());
   }
 
   //
@@ -1374,7 +1427,7 @@
         loadingIndicators.forEach((indicator) => indicator.remove());
 
         // Add the AI response to the chat
-        addMessageToChat(message.response, false);
+        addMessageToChat(message.response, false); // This will call finalizeChatTurn indirectly if !isUser
 
         let tokensThisTurn = 0;
         // Add total input tokens for this turn (sent from extension)
@@ -1416,8 +1469,14 @@
             if (tokenCountDisplay) {
                  tokenCountDisplay.style.color = "var(--vscode-errorForeground)";
             }
-        } // Closing curly brace for if (currentTokenCount >= TOKEN_LIMIT)
-        break; // Break for case "addResponse"
+        }
+        finalizeChatTurn(); // Ensure UI is reset after processing response
+        break; 
+
+      case "requestCancelled": // New message from extension if cancellation was successful
+        finalizeChatTurn();
+        addMessageToChat("AI request cancelled.", false); // System message
+        break;
 
       case "updateCheckedItems":
         // Handle if extension wants to update checked items
