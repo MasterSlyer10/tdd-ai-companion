@@ -12,17 +12,17 @@ let typingTimeout: NodeJS.Timeout | undefined;
 export function activate(context: vscode.ExtensionContext) {
   console.log("TDD AI Companion is now active!");
 
+  // Initialize the RAG service
+  ragService = new RAGService();
+
   // Initialize the sidebar
-  sidebarProvider = new SidebarProvider(context.extensionUri, context);
+  sidebarProvider = new SidebarProvider(context.extensionUri, context, ragService);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       SidebarProvider.viewType,
       sidebarProvider
     )
   );
-
-  // Initialize the RAG service
-  ragService = new RAGService();
 
   // Auto-clear index on project change and track current project
   autoManageIndexForProject(context).catch((error) => {
@@ -33,6 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
   const suggestTestCaseCommand = vscode.commands.registerCommand(
     "tdd-ai-companion.suggestTestCase",
     async (userMessage: string) => {
+      console.log("[suggestTestCaseCommand] Received userMessage from sidebar:", userMessage); // Log the incoming message
       // Debug
       console.log(sidebarProvider.getCurrentFeature());
       console.log(sidebarProvider.getSourceFiles());
@@ -86,13 +87,19 @@ export function activate(context: vscode.ExtensionContext) {
             const conversationHistory =
               sidebarProvider.getConversationHistory();
 
-            console.log("Conversation history:", conversationHistory);
+            console.log("[suggestTestCaseCommand] Value of 'prompt' variable before calling callDeepSeekAPI:", prompt);
+            console.log("[suggestTestCaseCommand] Conversation history before calling callDeepSeekAPI:", JSON.stringify(conversationHistory, null, 2));
 
-            // Call the DeepSeek r1 model
-            const response = await callDeepSeekAPI(prompt, conversationHistory);
+            // Call the DeepSeek r1 model (callDeepSeekAPI now returns an object)
+            const { responseText, llmInputPayload } = await callDeepSeekAPI(prompt, conversationHistory);
+            const responseTokenCount = Math.ceil(responseText.length / 4); // Estimate response token count
+            
+            // Estimate token count for the entire input payload sent to LLM
+            // The llmInputPayload is the `messages` array.
+            const totalInputTokens = Math.ceil(JSON.stringify(llmInputPayload).length / 4);
 
             // Display the response
-            sidebarProvider.addResponse(response);
+            sidebarProvider.addResponse(responseText, responseTokenCount, totalInputTokens);
           } catch (error) {
             vscode.window.showErrorMessage(
               `Error generating test suggestions: ${error}`
@@ -394,11 +401,11 @@ interface ChatMessage {
   content: string;
 }
 
-// This function will now use RAG for better context
+// This function will now use RAG for better context and return the LLM input payload
 async function callDeepSeekAPI(
-  prompt: string,
+  prompt: string, // This is the original user query from the sidebar
   conversationHistory: ChatMessage[] = []
-): Promise<string> {
+): Promise<{ responseText: string; llmInputPayload: ChatMessage[] }> {
   // Get API key from extension settings
   const config = vscode.workspace.getConfiguration("tddAICompanion");
   const useCustomLLM = config.get("useCustomLLM") as boolean;
@@ -416,67 +423,89 @@ async function callDeepSeekAPI(
     );
   }
 
+  console.log("--- RAG Debugging Start ---");
+  console.log("[RAG Components] Initial User Query (prompt):", prompt);
+  const currentFeature = sidebarProvider.getCurrentFeature();
+  console.log("[RAG Components] Current Feature:", currentFeature);
+
+  let enhancedPromptContent = prompt; // Start with the original query
+
+  try {
+    // Ensure config is available in this scope if not already
+    // const config = vscode.workspace.getConfiguration("tddAICompanion"); 
+    const pineconeApiKey = config.get("pineconeApiKey") as string;
+
+    if (pineconeApiKey) {
+      console.log("[RAG Components] Pinecone configured. Attempting to retrieve relevant code chunks...");
+      const relevantChunks = await ragService.retrieveRelevantCode(prompt); // Use original query for retrieval
+      
+      if (relevantChunks.length > 0) {
+        console.log(`[RAG Components] Found ${relevantChunks.length} relevant code chunks.`);
+        // Log the content of relevantChunks, stringified for better readability in console
+        console.log("[RAG Components] Embedding-derived Context (relevantChunks):", JSON.stringify(relevantChunks, null, 2));
+        
+        enhancedPromptContent = ragService.augmentPromptWithCodeContext(
+          prompt, // Original query
+          currentFeature,
+          relevantChunks
+        );
+        console.log("[RAG Components] Instruction: is part of the structure provided by augmentPromptWithCodeContext.");
+        console.log("[RAG Components] Prompt has been enhanced with RAG context.");
+      } else {
+        console.log("[RAG Components] No relevant chunks found. Proceeding with original query.");
+        // enhancedPromptContent remains the original 'prompt'
+      }
+    } else {
+      console.log("[RAG Components] Pinecone not configured, skipping RAG enhancement. Proceeding with original query.");
+      // enhancedPromptContent remains the original 'prompt'
+    }
+  } catch (error) {
+    console.warn("[RAG Components] RAG enhancement failed. Proceeding with original query. Error:", error);
+    // enhancedPromptContent remains the original 'prompt'
+  }
+
+  console.log("[RAG Components] Final Enhanced Prompt Content to be sent to LLM:", enhancedPromptContent);
+  console.log("--- RAG Debugging End ---");
+
   try {
     // Create the messages array
     const messages: ChatMessage[] = [
+      // System message can be added here if needed
       // {
       //   role: "system",
       //   content:
-      //     "You are an expert Test-Driven Development (TDD) assistant. Your task is to SUGGEST tests for the user's code, not write them.",
+      //     "You are an expert Test-Driven Development (TDD) assistant...",
       // },
     ];
 
-    // Add conversation history (limited to last X exchanges to avoid token limits)
-
-    console.log("Conversation History:", conversationHistory);
-    const maxHistoryLength = 6; // Adjust based on your token requirements
+    // Add conversation history
+    console.log("Original Conversation History (before adding current turn):", JSON.stringify(conversationHistory, null, 2));
+    const maxHistoryLength = 6; 
     const recentHistory = conversationHistory.slice(-maxHistoryLength);
     messages.push(...recentHistory);
 
-    // Enhance the prompt with RAG if possible
-    let enhancedPrompt = prompt;
-    try {
-      // Check if Pinecone is configured
-      const pineconeApiKey = config.get("pineconeApiKey") as string;
-
-      if (pineconeApiKey) {
-        // Try to get relevant code chunks from the RAG service
-        const relevantChunks = await ragService.retrieveRelevantCode(prompt);
-        if (relevantChunks.length > 0) {
-          // console.log("Retrieved relevant code chunks:", relevantChunks.length);
-          // console.log("Relevant code chunks:", relevantChunks);
-          enhancedPrompt = ragService.augmentPromptWithCodeContext(
-            prompt,
-            sidebarProvider.getCurrentFeature(),
-            relevantChunks
-          );
-
-          console.log(enhancedPrompt);
-        }
-      } else {
-        console.log("Pinecone not configured, skipping RAG enhancement");
-      }
-    } catch (error) {
-      console.warn("RAG enhancement failed, using original prompt:", error);
+    // Add current user's turn (with potentially enhanced prompt)
+    // Avoids duplicating the exact same message if it's the last one in history
+    const lastMessageInHistory = messages.length > 0 ? messages[messages.length - 1] : null;
+    if (!(lastMessageInHistory && lastMessageInHistory.role === "user" && lastMessageInHistory.content === enhancedPromptContent)) {
+        messages.push({
+            role: "user",
+            content: enhancedPromptContent,
+        });
+    } else {
+        console.log("[API Call] Current enhanced prompt is identical to the last user message in history, not adding duplicate to messages array.");
     }
-
-    // Add current prompt if not already in history
-    if (
-      !recentHistory.some(
-        (msg) => msg.role === "user" && msg.content === prompt
-      )
-    ) {
-      messages.push({
-        role: "user",
-        content: enhancedPrompt,
-      });
-    }
-
-    console.log(messages);
+    
+    console.log("Full messages array being sent to LLM:", JSON.stringify(messages, null, 2));
 
     if (useCustomLLM) {
-      return await callCustomLLM(messages);
+      // Assuming callCustomLLM might also need to return its input payload if we want to be consistent
+      // For now, let's focus on DeepSeek/OpenRouter path for token counting.
+      // If custom LLM token counting is needed, callCustomLLM should also return its input payload.
+      const customLlmResponse = await callCustomLLM(messages); 
+      return { responseText: customLlmResponse, llmInputPayload: messages };
     }
+
     // Make API call with conversation history
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -489,7 +518,7 @@ async function callDeepSeekAPI(
           "X-Title": "TDD AI Companion",
         },
         body: JSON.stringify({
-          model: "deepseek/deepseek-r1-distill-llama-70b:free",
+          model: "deepseek/deepseek-r1-distill-llama-70b:free", // Or your chosen model
           messages: messages,
         }),
       }
@@ -503,7 +532,7 @@ async function callDeepSeekAPI(
     }
 
     const data = (await response.json()) as OpenRouterResponse;
-    return data.choices[0].message.content;
+    return { responseText: data.choices[0].message.content, llmInputPayload: messages };
   } catch (error) {
     console.error("Error calling DeepSeek API:", error);
     throw new Error(

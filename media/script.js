@@ -11,8 +11,11 @@
   let expandedFolders = new Set();
   let checkedItems = new Set();
   let messageIdCounter = 0; // Counter for unique message IDs
+  let currentTokenCount = 0; // Token counter
+  const TOKEN_LIMIT = 100000; // Token limit
 
   // DOM Elements
+  let tokenCountDisplay = null; // To display token count
   const featureInput = document.getElementById("feature-input");
   // const editFeatureButton = document.getElementById("edit-feature");
 
@@ -58,6 +61,13 @@
 
     // Load checked items from storage
     loadCheckedItemsFromState();
+
+    // Load token count from state
+    loadTokenCountFromState();
+
+    // Initialize and display token count
+    initializeTokenDisplay(); // Create the display element
+    updateTokenDisplay(); // Set initial text
 
     // Add selection mode toggles
     addSelectionModeControls();
@@ -133,6 +143,15 @@
       vscode.postMessage({
         command: "newChat",
       });
+      currentTokenCount = 0; // Reset token count
+      saveTokenCountToState(); // Save reset count
+      // Re-enable chat input if it was disabled
+      if (chatInput) chatInput.disabled = false;
+      if (sendButton) sendButton.disabled = false;
+      // Remove any token limit message
+      const tokenLimitMsg = document.getElementById("token-limit-message");
+      if (tokenLimitMsg) tokenLimitMsg.remove();
+      updateTokenDisplay(); // Update display after reset
     });
     // Clear history
     // clearHistoryButton.addEventListener("click", clearHistory);
@@ -555,6 +574,86 @@
     }
   }
 
+  // Add function to save token count to state
+  function saveTokenCountToState() {
+    try {
+      vscode.setState({
+        ...vscode.getState(),
+        currentTokenCount: currentTokenCount,
+      });
+    } catch (e) {
+      console.error("Failed to save token count:", e);
+    }
+  }
+
+  // Add function to load token count from state
+  function loadTokenCountFromState() {
+    try {
+      const storedTokenCount = vscode.getState()?.currentTokenCount;
+      if (typeof storedTokenCount === 'number') {
+        currentTokenCount = storedTokenCount;
+      }
+      // Check if limit is already reached on load
+      if (currentTokenCount >= TOKEN_LIMIT) {
+        if (chatInput) chatInput.disabled = true;
+        if (sendButton) sendButton.disabled = true;
+        let tokenLimitMsg = document.getElementById("token-limit-message");
+        if (!tokenLimitMsg) {
+            tokenLimitMsg = document.createElement("div");
+            tokenLimitMsg.id = "token-limit-message";
+            tokenLimitMsg.style.color = "red";
+            tokenLimitMsg.style.padding = "5px";
+            tokenLimitMsg.textContent = `Token limit (${TOKEN_LIMIT}) reached. Please start a new chat to continue.`;
+            if (chatInput && chatInput.parentNode) {
+                chatInput.parentNode.insertBefore(tokenLimitMsg, chatInput);
+            } else {
+                chatMessages.appendChild(tokenLimitMsg);
+            }
+        }
+      }
+      updateTokenDisplay(); // Update display after loading
+    } catch (e) {
+      console.error("Failed to load token count:", e);
+    }
+  }
+
+  // Function to initialize the token count display element
+  function initializeTokenDisplay() {
+    if (!tokenCountDisplay) {
+      tokenCountDisplay = document.createElement("div");
+      tokenCountDisplay.id = "token-count-display";
+      tokenCountDisplay.style.padding = "5px";
+      tokenCountDisplay.style.textAlign = "right";
+      tokenCountDisplay.style.fontSize = "0.9em";
+      tokenCountDisplay.style.color = "var(--vscode-editor-foreground)"; // Default color
+
+      const chatInputArea = document.getElementById('chat-input');
+      if (chatInputArea && chatInputArea.parentNode) {
+        // Insert the display above the chat input field
+        chatInputArea.parentNode.insertBefore(tokenCountDisplay, chatInputArea);
+      } else {
+        // Fallback if chatInput isn't found or has no parent
+        console.warn("Chat input area not found for token display.");
+        // As a last resort, try to append it somewhere visible, e.g., near chatMessages
+        if (chatMessages && chatMessages.parentNode) {
+            chatMessages.parentNode.appendChild(tokenCountDisplay); // Or insertBefore chatMessages.nextSibling
+        }
+      }
+    }
+  }
+
+  // Function to update the token count display
+  function updateTokenDisplay() {
+    if (tokenCountDisplay) {
+      tokenCountDisplay.textContent = `Tokens: ${currentTokenCount} / ${TOKEN_LIMIT}`;
+      if (currentTokenCount >= TOKEN_LIMIT) {
+        tokenCountDisplay.style.color = "var(--vscode-errorForeground)"; // Use VS Code theme color for error
+      } else {
+        tokenCountDisplay.style.color = "var(--vscode-editor-foreground)";
+      }
+    }
+  }
+
   function toggleFolder(path) {
     if (expandedFolders.has(path)) {
       expandedFolders.delete(path);
@@ -725,12 +824,41 @@
   // CHAT FUNCTIONALITY PARTS
   //
   function sendChatMessage() {
-    const message = chatInput.value.trim();
+    // Explicitly get the element and its value again, right before sending.
+    const currentChatInputElement = document.getElementById("chat-input");
+    const message = currentChatInputElement ? currentChatInputElement.value.trim() : "";
+
     if (!message) {
       return; // Don't send empty messages
     }
 
-    console.log("Sending message:", message); // Debugging
+    // Check token limit
+    if (currentTokenCount >= TOKEN_LIMIT) {
+      let tokenLimitMsg = document.getElementById("token-limit-message");
+      if (!tokenLimitMsg) {
+        tokenLimitMsg = document.createElement("div");
+        tokenLimitMsg.id = "token-limit-message";
+        tokenLimitMsg.style.color = "red";
+        tokenLimitMsg.style.padding = "5px";
+        tokenLimitMsg.textContent = `Token limit (${TOKEN_LIMIT}) reached. Please start a new chat to continue.`;
+        // Insert before chat input or after chat messages
+        if (chatInput && chatInput.parentNode) {
+            chatInput.parentNode.insertBefore(tokenLimitMsg, chatInput);
+        } else {
+            chatMessages.appendChild(tokenLimitMsg);
+        }
+      }
+      // Disable input and send button
+      if (chatInput) chatInput.disabled = true;
+      if (sendButton) sendButton.disabled = true;
+      return;
+    }
+
+    // Token counting for user's message is now handled by the extension side via totalInputTokens.
+    // The webview will only add tokens when it receives them from the extension.
+
+    // This console.log will appear in the Webview Developer Tools console
+    console.log("Webview: Sending message to extension:", message, `Current Total Tokens (before this turn): ${currentTokenCount}`);
 
     // Add message to UI
     addMessageToChat(message, true);
@@ -1247,7 +1375,49 @@
 
         // Add the AI response to the chat
         addMessageToChat(message.response, false);
-        break;
+
+        let tokensThisTurn = 0;
+        // Add total input tokens for this turn (sent from extension)
+        if (typeof message.totalInputTokens === 'number') {
+          tokensThisTurn += message.totalInputTokens;
+          console.log(`Input Tokens (from extension): ${message.totalInputTokens}`);
+        }
+
+        // If the AI response includes a token count, add it
+        if (typeof message.responseTokenCount === 'number') {
+          tokensThisTurn += message.responseTokenCount;
+          console.log(`AI Response Tokens: ${message.responseTokenCount}`);
+        }
+        
+        if (tokensThisTurn > 0) {
+          currentTokenCount += tokensThisTurn;
+          saveTokenCountToState();
+          updateTokenDisplay();
+          console.log(`Total Tokens Added This Turn: ${tokensThisTurn}, New Grand Total: ${currentTokenCount}`);
+        }
+
+        // Check limit again after adding all tokens for this turn
+        if (currentTokenCount >= TOKEN_LIMIT) {
+            if (chatInput) chatInput.disabled = true;
+            if (sendButton) sendButton.disabled = true;
+            let tokenLimitMsg = document.getElementById("token-limit-message");
+            if (!tokenLimitMsg) {
+                tokenLimitMsg = document.createElement("div");
+                tokenLimitMsg.id = "token-limit-message";
+                tokenLimitMsg.style.color = "var(--vscode-errorForeground)"; // Use VS Code theme variable for error
+                tokenLimitMsg.style.padding = "5px";
+                tokenLimitMsg.textContent = `Token limit (${TOKEN_LIMIT}) reached. Please start a new chat to continue.`;
+                if (chatInput && chatInput.parentNode) {
+                    chatInput.parentNode.insertBefore(tokenLimitMsg, chatInput);
+                } else {
+                    chatMessages.appendChild(tokenLimitMsg);
+                }
+            }
+            if (tokenCountDisplay) {
+                 tokenCountDisplay.style.color = "var(--vscode-errorForeground)";
+            }
+        } // Closing curly brace for if (currentTokenCount >= TOKEN_LIMIT)
+        break; // Break for case "addResponse"
 
       case "updateCheckedItems":
         // Handle if extension wants to update checked items

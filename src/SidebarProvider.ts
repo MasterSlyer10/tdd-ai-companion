@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { RAGService } from "./ragService";
 
 interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -14,6 +15,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private _testFiles: vscode.Uri[] = [];
 
   private _context: vscode.ExtensionContext;
+  private _ragService: RAGService;
 
   private _checkedItems: string[] = [];
 
@@ -22,9 +24,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    context: vscode.ExtensionContext
+    context: vscode.ExtensionContext,
+    ragService: RAGService // Add RAGService here
   ) {
     this._context = context;
+    this._ragService = ragService; // Store it
 
     // Load the stuff from previous session
     this.loadState();
@@ -261,17 +265,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  public addResponse(response: string) {
+  public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
     // Add to conversation history
     this._chatHistory.push({ role: "assistant", content: response });
     this._context.workspaceState.update("chatHistory", this._chatHistory);
 
-    // Send to UI (keep existing code)
+    // Send to UI
     if (this._view) {
-      this._view.webview.postMessage({
+      const messagePayload: any = {
         command: "addResponse",
         response,
-      });
+      };
+      if (typeof responseTokenCount === 'number') {
+        messagePayload.responseTokenCount = responseTokenCount;
+      }
+      if (typeof totalInputTokens === 'number') {
+        messagePayload.totalInputTokens = totalInputTokens;
+      }
+      this._view.webview.postMessage(messagePayload);
     }
   }
 

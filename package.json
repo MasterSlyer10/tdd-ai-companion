@@ -122,10 +122,8 @@
   },
   "dependencies": {
     "@pinecone-database/pinecone": "^5.1.1",
-    "@types/node-fetch": "^2.6.12",
     "@types/typescript": "^2.0.0",
     "@vscode/codicons": "^0.0.36",
-    "node-fetch": "^2.7.0",
     "typescript-parser": "^2.6.1"
   }
 }

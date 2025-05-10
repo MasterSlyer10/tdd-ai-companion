@@ -5,7 +5,6 @@ import {
 } from "./codeParser";
 import * as vscode from "vscode";
 import { Pinecone } from "@pinecone-database/pinecone";
-import fetch from "node-fetch";
 
 export interface Embedding {
   id: string;
