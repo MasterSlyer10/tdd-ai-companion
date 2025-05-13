@@ -85,21 +85,23 @@ body {
 }
 
 .main-container {
-  padding: 0 16px 16px 16px;
+  padding: 16px; /* Consistent padding on all sides */
+  padding-top: 0; /* Remove top padding as header has margin-bottom */
 }
 
 .section-title {
-  font-size: 14px;
+  font-size: 16px; /* Increased font size */
   font-weight: 600;
-  margin: 0 0 8px 0;
+  margin: 0 0 12px 0; /* Increased bottom margin */
 }
 
 .project-panel {
   background-color: var(--background-elevated);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 16px;
+  padding: 16px; /* Increased padding for more whitespace */
+  margin-bottom: 20px; /* Increased margin for better separation */
+  border-bottom: 1px solid var(--border-color); /* Add a subtle divider */
 }
 
 .panel-group {
@@ -112,6 +114,7 @@ body {
   display: flex;
   align-items: center;
   font-size: 12px;
+  margin-bottom: 8px; /* Add space below info items */
 }
 
 .info-label {
@@ -135,7 +138,7 @@ body {
 }
 
 .chat-section {
-  margin-bottom: 16px;
+  margin-bottom: 20px; /* Increased margin for consistency */
 }
 
 .chat-container {
@@ -146,12 +149,13 @@ body {
   border-radius: 4px;
   overflow: hidden;
   background-color: var(--background-elevated);
+  padding: 12px; /* Add padding inside the chat container */
 }
 
 .messages-container {
   flex: 1;
-  padding: 12px;
   overflow-y: auto;
+  padding: 0; /* Remove padding here as it's added to chat-container */
   display: flex;
   flex-direction: column;
   gap: 12px;

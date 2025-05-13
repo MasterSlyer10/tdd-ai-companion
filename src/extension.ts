@@ -529,7 +529,7 @@ async function callGenerativeApi(
     
     console.log("Full 'contents' array being sent to Gemini API:", JSON.stringify(contents, null, 2));
 
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiApiKey}`;
 
     const response = await fetch(geminiApiUrl, {
       method: "POST",
@@ -560,6 +560,10 @@ async function callGenerativeApi(
 
   } catch (error) {
     console.error("Error calling Gemini API:", error);
+    // Send a message to the webview indicating generation failure
+    if (sidebarProvider._view) {
+        sidebarProvider._view.webview.postMessage({ command: "generationFailed" });
+    }
     throw new Error(
       `Failed to get test suggestions from Gemini API: ${
         error instanceof Error ? error.message : String(error)

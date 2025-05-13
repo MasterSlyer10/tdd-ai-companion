@@ -420,6 +420,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._sourceFiles = this._sourceFiles.filter(
       (f) => f.fsPath !== file.fsPath
     );
+    // Also remove from checked items
+    this._checkedItems = this._checkedItems.filter(itemPath => itemPath !== file.fsPath);
+    // Send updated checked items to webview
+    if (this._view) {
+        this._view.webview.postMessage({
+            command: "updateCheckedItems",
+            checkedItems: this._checkedItems,
+        });
+    }
     this.postSourceFilesUpdate();
     this.saveState();
   }
@@ -517,6 +526,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
                         <div class="selection-summary">
 
+                            <!-- Removed the Source Files toggle control -->
                             
                             <div class="selection-section">
                                 <h4><i class="codicon codicon-file-code"></i> Source Files</h4>
