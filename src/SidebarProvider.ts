@@ -307,6 +307,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
+    // Check if cancellation has been requested
+    if (this._cancellationTokenSource && this._cancellationTokenSource.token.isCancellationRequested) {
+        console.log("Cancellation requested, not adding response.");
+        return; // Do not add response if cancelled
+    }
+
+    // If the response is empty, provide a default message
+    if (!response) {
+      response = "AI failed to generate a response.";
+    }
+
     // Add to conversation history
     this._chatHistory.push({ role: "assistant", content: response });
     this._context.workspaceState.update("chatHistory", this._chatHistory);
@@ -562,11 +573,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                                 <button id="suggest-test-button" class="action-button" title="Generate test suggestions">
                                     <i class="codicon codicon-lightbulb"></i> Suggest Tests
                                 </button>
+                                <textarea id="chat-input" class="message-input" placeholder="Enter your message..."></textarea>
+                                <button id="send-button" class="send-button" title="Send Request">
+                                  <i class="codicon codicon-send"></i>
+                              </button>
                             </div>
-                            <textarea id="chat-input" class="message-input" placeholder="Enter your message..."></textarea>
-                            <button id="send-button" class="send-button" title="Send Request">
-                                <i class="codicon codicon-send"></i>
-                            </button>
                         </div>
                     </div>
                 </section>

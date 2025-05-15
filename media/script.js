@@ -13,6 +13,7 @@
   let messageIdCounter = 0; // Counter for unique message IDs
   let currentTokenCount = 0; // Token counter
   const TOKEN_LIMIT = 100000; // Token limit
+  let isRequestCancelled = false; // Flag to track if the current request is cancelled
 
   // DOM Elements
   let tokenCountDisplay = null; // To display token count
@@ -29,6 +30,7 @@
   const chatInput = document.getElementById("chat-input");
   const sendButton = document.getElementById("send-button");
   const suggestTestButton = document.getElementById("suggest-test-button");
+  const suggestTestCaseButton = document.getElementById("suggest-test-case-button"); // New button
   const chatMessages = document.getElementById("chat-messages");
   const suggestionsHistory = document.getElementById("suggestions-history");
 
@@ -47,12 +49,14 @@
     if (!sendButton) return;
     sendButton.dataset.state = state;
     if (state === "stop") {
-      sendButton.innerHTML = '<i class="codicon codicon-debug-stop"></i> Stop';
+      sendButton.innerHTML = '<i class="codicon codicon-debug-stop"></i>'; // Use icon only
       sendButton.title = "Stop Generating";
+      sendButton.classList.add('stop-button-animated'); // Add animation class
       if (chatInput) chatInput.disabled = true;
     } else { // "send"
       sendButton.innerHTML = '<i class="codicon codicon-send"></i>';
       sendButton.title = "Send Request";
+      sendButton.classList.remove('stop-button-animated'); // Remove animation class
       if (chatInput) chatInput.disabled = false;
     }
   }
@@ -79,12 +83,15 @@
     // Load checked items from storage
     loadCheckedItemsFromState();
 
+    // Reset cancellation flag on init
+    isRequestCancelled = false;
+
     // Load token count from state
     loadTokenCountFromState();
 
     // Initialize and display token count
-    initializeTokenDisplay(); // Create the display element
-    updateTokenDisplay(); // Set initial text
+    initializeTokenDisplay(); // Create the display element and place it
+    updateTokenDisplay(); // Set initial text and color
 
     // Removed selection mode toggles as per user request
 
@@ -128,12 +135,27 @@
     }
 
     if (suggestTestButton) {
+      // Modify the suggest test button to be an icon with hover text
+      suggestTestButton.className = "suggest-test-button-icon";
+      suggestTestButton.innerHTML = '<i class="codicon codicon-lightbulb"></i>';
+      suggestTestButton.title = "Suggest test cases"; // Tooltip handled by CSS :after
+
       suggestTestButton.addEventListener("click", () => {
         console.log("Suggest test button clicked");
         sendPredefinedSuggestion();
       });
     } else {
       console.error("Suggest test button not found");
+    }
+
+    // Add event listener for the new suggest test case button
+    if (suggestTestCaseButton) {
+      suggestTestCaseButton.addEventListener("click", () => {
+        console.log("Suggest test case button clicked");
+        sendSuggestTestCaseMessage(); // New function to handle this
+      });
+    } else {
+      console.error("Suggest test case button not found");
     }
 
     if (chatInput) {
@@ -582,27 +604,21 @@
     }
   }
 
-  // Function to initialize the token count display element
+  // Function to initialize the token count display element and place it
   function initializeTokenDisplay() {
     if (!tokenCountDisplay) {
       tokenCountDisplay = document.createElement("div");
       tokenCountDisplay.id = "token-count-display";
-      tokenCountDisplay.style.padding = "5px";
-      tokenCountDisplay.style.textAlign = "right";
-      tokenCountDisplay.style.fontSize = "0.9em";
-      tokenCountDisplay.style.color = "var(--vscode-editor-foreground)"; // Default color
+      tokenCountDisplay.className = "token-count-display"; // Add the new CSS class
 
-      const chatInputArea = document.getElementById('chat-input');
-      if (chatInputArea && chatInputArea.parentNode) {
-        // Insert the display above the chat input field
-        chatInputArea.parentNode.insertBefore(tokenCountDisplay, chatInputArea);
+      // Find the chat input area container (which should have position: relative)
+      const chatInputAreaContainer = document.querySelector('.chat-input-area');
+      if (chatInputAreaContainer) {
+        chatInputAreaContainer.appendChild(tokenCountDisplay); // Append to the container
       } else {
-        // Fallback if chatInput isn't found or has no parent
-        console.warn("Chat input area not found for token display.");
-        // As a last resort, try to append it somewhere visible, e.g., near chatMessages
-        if (chatMessages && chatMessages.parentNode) {
-            chatMessages.parentNode.appendChild(tokenCountDisplay); // Or insertBefore chatMessages.nextSibling
-        }
+        console.warn("Chat input area container not found for token display.");
+        // Fallback: append to body or another suitable element if the container isn't found
+        document.body.appendChild(tokenCountDisplay);
       }
     }
   }
@@ -612,9 +628,9 @@
     if (tokenCountDisplay) {
       tokenCountDisplay.textContent = `Tokens: ${currentTokenCount} / ${TOKEN_LIMIT}`;
       if (currentTokenCount >= TOKEN_LIMIT) {
-        tokenCountDisplay.style.color = "var(--vscode-errorForeground)"; // Use VS Code theme color for error
+        tokenCountDisplay.classList.add('error'); // Add error class for styling
       } else {
-        tokenCountDisplay.style.color = "var(--vscode-editor-foreground)";
+        tokenCountDisplay.classList.remove('error'); // Remove error class
       }
     }
   }
@@ -864,6 +880,7 @@
     console.log("Webview: Sending message to extension:", message, `Current Total Tokens (before this turn): ${currentTokenCount}`);
 
     setSendButtonState("stop"); // Change to Stop button
+    isRequestCancelled = false; // Reset cancellation flag for new request
 
     // Add message to UI
     addMessageToChat(message, true);
@@ -887,7 +904,7 @@
     });
   }
 
-  // Simple Suggest Button
+  // Simple Suggest Button (Lightbulb icon)
   function sendPredefinedSuggestion() {
     // Send a predefined message
     const predefinedMessage =
@@ -899,6 +916,45 @@
     }
 
     setSendButtonState("stop"); // Change to Stop button
+    isRequestCancelled = false; // Reset cancellation flag for new request
+
+    // Add message to UI
+    addMessageToChat(predefinedMessage, true);
+
+    // Clear input field
+    if (chatInput) {
+      chatInput.value = "";
+    }
+
+    // Display loading indicator
+    const loadingElement = document.createElement("div");
+    loadingElement.className = "loading-indicator";
+    loadingElement.textContent = "Generating response...";
+    chatMessages.appendChild(loadingElement);
+
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Send message to extension
+    vscode.postMessage({
+      command: "requestTestSuggestion",
+      message: predefinedMessage,
+    });
+  }
+
+  // New function for the "Suggest Test Case" button
+  function sendSuggestTestCaseMessage() {
+     // Send a predefined message for suggesting a test case
+    const predefinedMessage =
+      "Suggest a new test case for my current implementation"; // Same message as the lightbulb for now
+
+    // Set the input field text (optional - shows the user what's being sent)
+    if (chatInput) {
+      chatInput.value = predefinedMessage;
+    }
+
+    setSendButtonState("stop"); // Change to Stop button
+    isRequestCancelled = false; // Reset cancellation flag for new request
 
     // Add message to UI
     addMessageToChat(predefinedMessage, true);
@@ -985,11 +1041,33 @@
     } else {
       contentElement.textContent = content; // User messages are plain text
     }
-    messageElement.appendChild(contentElement);
+    // Create a wrapper for content and actions
+    const contentWrapper = document.createElement("div");
+    contentWrapper.className = "message-content-wrapper"; // Add a new class for styling
+
+    contentWrapper.appendChild(contentElement);
 
     // Add actions container
     const actionsElement = document.createElement("div");
     actionsElement.className = "message-actions";
+
+    // Add Copy Button
+    const copyButton = document.createElement("button");
+    copyButton.className = "message-action-button copy-button";
+    copyButton.innerHTML = '<i class="codicon codicon-copy"></i>';
+    copyButton.title = "Copy message";
+    copyButton.onclick = () => {
+        // Use dataset.rawText for user messages, innerHTML for AI messages (to preserve formatting)
+        const textToCopy = isUser ? messageElement.dataset.rawText : contentElement.textContent;
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            // Optional: Provide visual feedback (e.g., change icon or show a tooltip)
+            console.log("Message copied to clipboard");
+        }).catch(err => {
+            console.error("Failed to copy message: ", err);
+        });
+    };
+    actionsElement.appendChild(copyButton);
+
 
     if (isUser) {
       const editButton = document.createElement("button");
@@ -1015,7 +1093,9 @@
       deleteButton.onclick = () => handleDeleteAIMessage(messageElement);
       actionsElement.appendChild(deleteButton);
     }
-    messageElement.appendChild(actionsElement);
+    contentWrapper.appendChild(actionsElement); // Append actions to the wrapper
+
+    messageElement.appendChild(contentWrapper); // Append the wrapper to the message element
 
 
     // Remove any loading indicators
@@ -1384,6 +1464,12 @@
         break;
 
       case "addResponse":
+        // If the request was cancelled on the frontend, ignore this response
+        if (isRequestCancelled) {
+            console.log("Received response after cancellation, ignoring.");
+            return;
+        }
+
         // Remove any loading indicators
         const loadingIndicators =
           chatMessages.querySelectorAll(".loading-indicator");
@@ -1466,101 +1552,11 @@
 
         if (message.history && message.history.length > 0) {
           message.history.forEach((msg) => {
-            const messageId = `msg-${messageIdCounter++}`; // Generate unique ID for loaded message
-            const messageElement = document.createElement("div");
-            messageElement.id = messageId;
-            messageElement.className = `message ${
-              msg.role === "user" ? "user" : "ai"
-            }-message`;
-
-            // Add avatar
-            const avatarElement = document.createElement("div");
-            avatarElement.className = "message-avatar";
-            avatarElement.innerHTML =
-              msg.role === "user"
-                ? '<i class="codicon codicon-account"></i>'
-                : '<i class="codicon codicon-beaker"></i>';
-            messageElement.appendChild(avatarElement);
-
-            // Add content
-            const contentElement = document.createElement("div");
-            contentElement.className = "message-content";
-
-            if (msg.role === "user") {
-              messageElement.dataset.rawText = msg.content; // Store raw text for loaded user messages
-            }
-
-            if (msg.role === "assistant") {
-              // contentType: "html" is set in saveChatHistory for AI messages
-              if (msg.contentType === "html" && msg.content && msg.content.includes("<")) {
-                contentElement.innerHTML = msg.content;
-              } else if (typeof marked !== "undefined" && msg.content) {
-                try {
-                    marked.setOptions({
-                        highlight: function (code, lang) {
-                            if (Prism.languages[lang]) {
-                                return Prism.highlight(code, Prism.languages[lang], lang);
-                            }
-                            return code;
-                        },
-                        breaks: true,
-                        gfm: true,
-                    });
-                    contentElement.innerHTML = marked.parse(msg.content);
-                } catch (e) {
-                    console.error("Error parsing markdown for loaded AI message:", e);
-                    contentElement.textContent = msg.content; // Fallback
-                }
-              } else {
-                contentElement.textContent = msg.content || ""; // Fallback if no marked or not HTML
-              }
-              // Apply syntax highlighting after innerHTML is set
-              if (typeof Prism !== "undefined") {
-                setTimeout(() => {
-                    contentElement
-                        .querySelectorAll("pre code")
-                        .forEach((block) => {
-                            Prism.highlightElement(block);
-                        });
-                }, 0);
-              }
-            } else { // User message
-              contentElement.textContent = msg.content;
-            }
-            messageElement.appendChild(contentElement);
-
-            // Add actions container
-            const actionsElement = document.createElement("div");
-            actionsElement.className = "message-actions";
-
-            if (msg.role === "user") {
-              const editButton = document.createElement("button");
-              editButton.className = "message-action-button edit-button";
-              editButton.innerHTML = '<i class="codicon codicon-edit"></i>';
-              editButton.title = "Edit message";
-              // msg.content is the raw text for user messages, which is now also in dataset.rawText
-              editButton.onclick = () => handleEditUserMessage(messageElement, contentElement, messageElement.dataset.rawText);
-              actionsElement.appendChild(editButton);
-
-              const deleteUserButton = document.createElement("button");
-              deleteUserButton.className = "message-action-button delete-button";
-              deleteUserButton.innerHTML = '<i class="codicon codicon-trash"></i>';
-              deleteUserButton.title = "Delete message and subsequent responses";
-              deleteUserButton.onclick = () => handleDeleteUserMessage(messageElement);
-              actionsElement.appendChild(deleteUserButton);
-            } else { // AI message
-              const deleteButton = document.createElement("button");
-              deleteButton.className = "message-action-button delete-button";
-              deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
-              deleteButton.title = "Delete message";
-              deleteButton.onclick = () => handleDeleteAIMessage(messageElement);
-              actionsElement.appendChild(deleteButton);
-            }
-            messageElement.appendChild(actionsElement);
-            chatMessages.appendChild(messageElement);
+            // Use the addMessageToChat function to render historical messages
+            addMessageToChat(msg.content, msg.role === "user");
           });
 
-          // Scroll to bottom
+          // Scroll to bottom after all messages are added
           chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         break;

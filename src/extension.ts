@@ -561,8 +561,8 @@ async function callGenerativeApi(
   } catch (error) {
     console.error("Error calling Gemini API:", error);
     // Send a message to the webview indicating generation failure
-    if (sidebarProvider._view) {
-        sidebarProvider._view.webview.postMessage({ command: "generationFailed" });
+    if (sidebarProvider) { // Use sidebarProvider directly
+        sidebarProvider.addResponse("AI failed to generate a response."); // Use addResponse
     }
     throw new Error(
       `Failed to get test suggestions from Gemini API: ${
