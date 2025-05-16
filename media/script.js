@@ -22,7 +22,6 @@
 
   const fileTreeElement = document.getElementById("file-tree");
   const refreshTreeButton = document.getElementById("refresh-tree");
-  const collapseAllButton = document.getElementById("collapse-all");
   const fileFilterInput = document.getElementById("file-filter");
   const sourceFilesContainer = document.getElementById("source-files");
   const testFilesContainer = document.getElementById("test-files");
@@ -115,10 +114,6 @@
       // Edit saving/handling is done by a dedicated button within the message edit UI.
       console.log("Refreshing file tree.");
       requestWorkspaceFiles();
-    });
-
-    collapseAllButton.addEventListener("click", () => {
-      collapseAllFolders();
     });
 
     // File filtering
@@ -1353,15 +1348,34 @@
       return;
     }
 
+    // Add 'editing' class to the message element
+    messageElement.classList.add('editing');
+
+    // Add 'editing' class to the message element
+    messageElement.classList.add('editing');
+
     contentElement.innerHTML = ''; // Clear current content (e.g., the static text)
 
     const editArea = document.createElement('textarea');
     editArea.className = 'edit-area';
     editArea.value = originalRawContent; // Use the raw text for editing
 
+    // Attempt to remove any conflicting inline height style
+    editArea.style.removeProperty('height');
+
     // Auto-resize textarea
     editArea.style.height = 'auto';
-    editArea.style.height = (editArea.scrollHeight) + 'px';
+    // Set scroll position to the top to show the beginning of the text
+    editArea.scrollTop = 0;
+
+    // Use requestAnimationFrame to allow the browser to calculate scrollHeight correctly after repaint
+    requestAnimationFrame(() => {
+        editArea.style.height = 'auto'; // Ensure height is auto before calculating scrollHeight
+        editArea.style.height = (editArea.scrollHeight) + 'px';
+        // Set scroll position to the top after height is adjusted
+        editArea.scrollTop = 0;
+    });
+
     editArea.addEventListener('input', function () {
         this.style.height = 'auto';
         this.style.height = (this.scrollHeight) + 'px';
@@ -1413,25 +1427,220 @@
       requestWorkspaceFiles();
     };
 
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.marginTop = '5px';
-    buttonContainer.appendChild(reloadAndSaveButton);
+    // Find the existing message-actions container
+    const actionsElement = messageElement.querySelector('.message-actions');
+    if (!actionsElement) {
+        console.error("Message actions container not found for editing.");
+        // Fallback: just append the edit area and buttons below the content if actions not found
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.marginTop = '5px';
+        buttonContainer.appendChild(reloadAndSaveButton);
+
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Cancel';
+        cancelButton.className = 'edit-action-button cancel-edit-button';
+        cancelButton.title = 'Cancel editing';
+        cancelButton.onclick = () => {
+          // Restore original content and remove edit UI
+          contentElement.innerHTML = ''; // Clear textarea and buttons
+          contentElement.textContent = originalRawContent; // Restore text
+          // messageElement.dataset.rawText remains the value from before this edit attempt
+        };
+        buttonContainer.appendChild(cancelButton);
+
+        contentElement.appendChild(editArea);
+        contentElement.appendChild(buttonContainer);
+        editArea.focus();
+        return; // Exit the function after fallback
+    }
+
+    // Hide the original action buttons (copy, edit, delete)
+    actionsElement.querySelectorAll('.message-action-button:not(.edit-action-button)').forEach(btn => {
+        btn.style.display = 'none';
+    });
+
+    // Append the edit area and the new buttons
+    contentElement.appendChild(editArea);
+
+    // Append the new buttons to the actions container
+    actionsElement.appendChild(reloadAndSaveButton);
+    actionsElement.appendChild(cancelButton);
+
+    // Ensure actions container is visible in edit mode
+    actionsElement.style.opacity = 1;
+    actionsElement.style.display = 'flex'; // Ensure flex display
+
+    editArea.focus();
+  }
+
+  // Function to restore original actions visibility when editing is cancelled or saved
+  function restoreOriginalActions(messageElement) {
+      const actionsElement = messageElement.querySelector('.message-actions');
+      if (actionsElement) {
+          // Remove edit action buttons
+          actionsElement.querySelectorAll('.edit-action-button').forEach(btn => {
+              if (btn.parentNode) {
+                  btn.parentNode.removeChild(btn);
+              }
+          });
+          // Show original action buttons
+          actionsElement.querySelectorAll('.message-action-button').forEach(btn => {
+              btn.style.display = 'flex'; // Or whatever the default display was
+          });
+          // Restore opacity based on hover (or keep visible if needed)
+          // actionsElement.style.opacity = 0; // Will be shown on hover by CSS
+      }
+  }
+
+  // Modify the onclick handlers of the edit action buttons to call restoreOriginalActions
+  // This needs to be done *after* the buttons are created and before they are appended.
+  // Let's adjust the handleEditUserMessage function again.
+  // (Self-correction: Instead of modifying the existing function, let's refine the logic within it.)
+
+  // Refined handleEditUserMessage (incorporating the logic above)
+  function handleEditUserMessage(messageElement, contentElement, originalRawContent) {
+    // Prevent editing if already in edit mode
+    if (contentElement.querySelector('textarea.edit-area')) {
+      return;
+    }
+
+    // Add 'editing' class to the message element
+    messageElement.classList.add('editing');
+
+    contentElement.innerHTML = ''; // Clear current content (e.g., the static text)
+
+    const editArea = document.createElement('textarea');
+    editArea.className = 'edit-area';
+    editArea.value = originalRawContent; // Use the raw text for editing
+
+    // Auto-resize textarea
+    editArea.style.height = 'auto';
+    editArea.style.height = (editArea.scrollHeight) + 'px';
+    editArea.addEventListener('input', function () {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    const reloadAndSaveButton = document.createElement('button');
+    reloadAndSaveButton.innerHTML = '<i class="codicon codicon-save"></i>'; // Use save icon
+    reloadAndSaveButton.className = 'edit-action-button save-resend-button'; // Add a specific class
+    reloadAndSaveButton.title = 'Save changes, delete subsequent messages, resend, and refresh file tree';
 
     const cancelButton = document.createElement('button');
-    cancelButton.textContent = 'Cancel';
-    cancelButton.className = 'edit-action-button cancel-edit-button';
+    cancelButton.innerHTML = '<i class="codicon codicon-close"></i>'; // Use close icon
+    cancelButton.className = 'edit-action-button cancel-edit-button'; // Add a specific class
     cancelButton.title = 'Cancel editing';
+
+    // Find the existing message-actions container
+    const actionsElement = messageElement.querySelector('.message-actions');
+    if (!actionsElement) {
+        console.error("Message actions container not found for editing.");
+        // Fallback: just append the edit area and buttons below the content if actions not found
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.marginTop = '5px';
+        buttonContainer.appendChild(reloadAndSaveButton);
+        buttonContainer.appendChild(cancelButton);
+
+        contentElement.appendChild(editArea);
+        contentElement.appendChild(buttonContainer);
+        editArea.focus();
+        return; // Exit the function after fallback
+    }
+
+    // Hide the original action buttons (copy, edit, delete)
+    actionsElement.querySelectorAll('.message-action-button:not(.edit-action-button)').forEach(btn => {
+        btn.style.display = 'none';
+    });
+
+    // Append the edit area to the content element
+    contentElement.appendChild(editArea);
+
+    // Append the new buttons to the actions container
+    actionsElement.appendChild(reloadAndSaveButton);
+    actionsElement.appendChild(cancelButton);
+
+    // Ensure actions container is visible and uses flex display in edit mode
+    actionsElement.style.opacity = 1;
+    actionsElement.style.display = 'flex';
+
+    // Add event listeners for the new buttons
+    reloadAndSaveButton.onclick = () => {
+      const newContent = editArea.value.trim();
+      if (newContent === "") {
+        alert("Message cannot be empty.");
+        return;
+      }
+
+      // 1. Update UI: Exit edit mode by replacing textarea with new text
+      contentElement.innerHTML = '';
+      contentElement.textContent = newContent;
+      messageElement.dataset.rawText = newContent;
+
+      // 2. Delete all subsequent messages
+      let currentMsg = messageElement.nextElementSibling;
+      while (currentMsg) {
+        const toRemove = currentMsg;
+        currentMsg = currentMsg.nextElementSibling;
+        if (chatMessages.contains(toRemove)) {
+          chatMessages.removeChild(toRemove);
+        }
+      }
+
+      // 3. Save chat history
+      saveChatHistory();
+
+      // 4. Display loading indicator and resend the edited message
+      const loadingElement = document.createElement("div");
+      loadingElement.className = "loading-indicator";
+      loadingElement.textContent = "Generating response...";
+      chatMessages.appendChild(loadingElement); // Append to main chat area
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      vscode.postMessage({
+        command: "requestTestSuggestion",
+        message: newContent,
+      });
+
+      // 5. Refresh file tree (as per original "reload" functionality)
+      requestWorkspaceFiles();
+
+      // 6. Restore original action buttons
+      restoreOriginalActions(messageElement);
+    };
+
     cancelButton.onclick = () => {
       // Restore original content and remove edit UI
       contentElement.innerHTML = ''; // Clear textarea and buttons
       contentElement.textContent = originalRawContent; // Restore text
       // messageElement.dataset.rawText remains the value from before this edit attempt
-    };
-    buttonContainer.appendChild(cancelButton);
 
-    contentElement.appendChild(editArea);
-    contentElement.appendChild(buttonContainer);
+    // Restore original action buttons
+    restoreOriginalActions(messageElement);
+  };
+
+
     editArea.focus();
+  }
+
+  // Function to restore original actions visibility when editing is cancelled or saved
+  function restoreOriginalActions(messageElement) {
+      const actionsElement = messageElement.querySelector('.message-actions');
+      if (actionsElement) {
+          // Remove edit action buttons
+          actionsElement.querySelectorAll('.edit-action-button').forEach(btn => {
+              if (btn.parentNode) {
+                  btn.parentNode.removeChild(btn);
+              }
+          });
+          // Show original action buttons
+          actionsElement.querySelectorAll('.message-action-button').forEach(btn => {
+              btn.style.display = 'flex'; // Or whatever the default display was
+          });
+          // Restore opacity based on hover (or keep visible if needed)
+          // actionsElement.style.opacity = 0; // Will be shown on hover by CSS
+      }
+      // Remove 'editing' class from the message element
+      messageElement.classList.remove('editing');
   }
 
   // handleSaveUserEdit and handleCancelUserEdit are no longer needed.
@@ -1519,18 +1728,33 @@
                  tokenCountDisplay.style.color = "var(--vscode-errorForeground)";
             }
         }
+        console.log("[Webview] addResponse: Finalizing chat turn.");
         finalizeChatTurn(); // Ensure UI is reset after processing response
         break;
 
       case "requestCancelled": // New message from extension if cancellation was successful
-        finalizeChatTurn();
+        console.log("[Webview] Received requestCancelled message.");
+        // Explicitly remove loading indicators before adding the cancellation message
+        const loadingIndicatorsOnCancel = chatMessages.querySelectorAll(".loading-indicator");
+        loadingIndicatorsOnCancel.forEach((indicator) => {
+            console.log("[Webview] Removing loading indicator on cancellation.");
+            indicator.remove();
+        });
         addMessageToChat("AI request cancelled.", false); // System message
+        console.log("[Webview] Added cancellation message. Finalizing chat turn.");
         finalizeChatTurn(); // Ensure UI is reset on cancellation
         break;
 
       case "generationFailed": // New message to handle generation errors
-        console.error("AI generation failed."); // Log the error in the webview console
+        console.error("[Webview] Received generationFailed message. AI generation failed."); // Log the error in the webview console
+        // Explicitly remove loading indicators before adding the failure message
+        const loadingIndicatorsOnFail = chatMessages.querySelectorAll(".loading-indicator");
+        loadingIndicatorsOnFail.forEach((indicator) => {
+             console.log("[Webview] Removing loading indicator on generation failure.");
+             indicator.remove();
+        });
         addMessageToChat("AI generation failed. Please try again.", false); // Inform the user
+        console.log("[Webview] Added failure message. Finalizing chat turn.");
         finalizeChatTurn(); // Reset UI state
         break;
 
@@ -1539,6 +1763,25 @@
         if (message.paths && Array.isArray(message.paths)) {
           checkedItems = new Set(message.paths);
           renderFileTree();
+        }
+        break;
+      case "uncheckFileTreeItem":
+        // Handle message to uncheck an item in the file tree
+        if (message.path) {
+            checkedItems.delete(message.path);
+            // Find the corresponding checkbox in the DOM and update its state
+            const itemElement = fileTreeElement.querySelector(`.tree-item[data-path="${message.path}"]`);
+            if (itemElement) {
+                const checkbox = itemElement.querySelector('.tree-item-checkbox');
+                if (checkbox) {
+                    checkbox.checked = false;
+                    checkbox.indeterminate = false;
+                    // Also update parent checkbox states
+                    updateParentCheckboxStateInTree(itemElement);
+                }
+            }
+            saveCheckedItemsToState();
+            saveCheckedItems();
         }
         break;
       case "loadChatHistory":
@@ -1636,7 +1879,7 @@
               const found = findNodeByPath(path, child);
               if (found) return found;
           }
-      }
+          }
       return null;
   }
 

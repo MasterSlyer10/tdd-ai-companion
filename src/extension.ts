@@ -124,16 +124,26 @@ export function activate(context: vscode.ExtensionContext) {
             sidebarProvider.addResponse(responseText, responseTokenCount, totalInputTokens);
           } catch (error: any) {
             if (error.name === 'AbortError') {
-              console.log("Fetch request aborted.");
-              // SidebarProvider.cancelCurrentRequest already posts 'requestCancelled'
-              // No need to show error message for user-initiated cancellation.
+              console.log("[suggestTestCaseCommand] Fetch request aborted successfully.");
+              // The SidebarProvider's cancelCurrentRequest already posts 'requestCancelled'
+              // message to the webview, which updates the UI. No need for an extra message here.
             } else {
+              console.error("[suggestTestCaseCommand] Error during generation:", error);
               vscode.window.showErrorMessage(
-                `Error generating test suggestions: ${error}`
+                `Error generating test suggestions: ${error instanceof Error ? error.message : String(error)}`
               );
+              // Also inform the webview about the failure
+              if (sidebarProvider && sidebarProvider._view) {
+                 sidebarProvider._view.webview.postMessage({ command: "generationFailed" });
+              }
             }
           } finally {
-            sidebarProvider.finalizeRequest(); // Clean up CancellationTokenSource in SidebarProvider
+            console.log("[suggestTestCaseCommand] Finalizing request.");
+            // Dispose listeners
+            sidebarTokenDisposable?.dispose();
+            progressTokenDisposable?.dispose(); // Use ?. for safety
+            // Clean up CancellationTokenSource in SidebarProvider
+            sidebarProvider.finalizeRequest();
           }
         }
       );
@@ -627,5 +637,8 @@ async function autoManageIndexForProject(context: vscode.ExtensionContext) {
 
 // This method is called when your extension is deactivated
 export function deactivate() {
+  // Dispose of the file system watcher
+  // The watcher is automatically disposed when its containing extension is deactivated
+  // because it was added to context.subscriptions.
   // checkAndClearIndexForNewProject(vscode.extensions.getExtension("tdd-ai-companion")?.extensionUri);
 }

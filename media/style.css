@@ -24,6 +24,8 @@ body {
   line-height: 1.5;
   width: 100%;
   overflow-x: hidden;
+  display: flex; /* Make body a flex container */
+  flex-direction: column; /* Stack children vertically */
 }
 
 .app-header {
@@ -31,6 +33,7 @@ body {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 16px;
+  flex: 0 0 auto; /* Prevent header from growing or shrinking */
 }
 
 .header-content {
@@ -94,12 +97,20 @@ body {
   margin: 0 0 12px 0; /* Increased bottom margin */
 }
 
-.project-panel {
-  background-color: var(--background-elevated);
-  border-radius: 4px;
-  padding: 16px; /* Increased padding for more whitespace */
-  margin-bottom: 20px; /* Increased margin for better separation */
-  border-bottom: 1px solid var(--border-color); /* Add a subtle divider */
+.project-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px; /* Add some space below the header */
+}
+
+.project-panel-header .section-title {
+    margin: 0; /* Remove default margin from the title */
+}
+
+.project-panel-header .settings-container {
+    padding-bottom: 0; /* Remove padding from the settings container */
+    width: auto; /* Allow the container to size based on content */
 }
 
 .panel-group {
@@ -113,6 +124,20 @@ body {
   align-items: center;
   font-size: 12px;
   margin-bottom: 8px; /* Add space below info items */
+  gap: 8px; /* Add space between label and value */
+}
+
+.info-item {
+  padding: 0 2px; /* Add 2px space on the sides */
+}
+
+.info-label {
+  width: auto; /* Adjust width as needed */
+  flex-shrink: 0; /* Prevent shrinking */
+  display: flex; /* Use flexbox for internal alignment */
+  align-items: center; /* Vertically center items */
+  justify-content: start; /* Horizontally center items */
+  gap: 2px; /* Add a small gap between icon and text */
 }
 
 .user-message {
@@ -163,7 +188,7 @@ body {
   background-color: transparent; /* Make background transparent */
   color: var(--input-foreground);
   resize: none;
-  height: 32px; /* Fixed height for single line */
+  height: auto; /* Allow height to adjust based on content */
   max-height: 120px; /* Max height for multi-line */
   overflow-y: auto; /* Add scroll if content exceeds max height */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
@@ -219,7 +244,6 @@ body {
   background-color: transparent;
   color: var(--text-secondary); /* Subtle color */
   border: none;
-  border-radius: 50%; /* Make it circular */
   cursor: pointer;
   padding: 0; /* Remove padding */
   flex-shrink: 0; /* Prevent shrinking */
@@ -292,7 +316,6 @@ body {
   background-color: transparent;
   color: var(--button-foreground);
   border: none;
-  border-radius: 50%; /* Make it circular */
   cursor: pointer;
   transition: background-color 0.2s ease-in-out;
   flex-shrink: 0; /* Prevent shrinking */
@@ -521,6 +544,7 @@ body {
   border-radius: 3px;
   background-color: var(--input-background);
   color: var(--input-foreground);
+  box-sizing: border-box;
 }
 
 .tree-view {
@@ -673,7 +697,7 @@ body {
   border-radius: 4px;
   margin: 8px 0;
   max-height: 400px; /* Increased height for better visibility */
-  overflow: hidden;
+  overflow-y: auto; /* Change to auto for vertical scrolling */
   display: flex;
   flex-direction: column;
 }
@@ -887,7 +911,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 0; /* Important for Firefox */
+  /* Removed min-height: 0; */
 }
 
 /* Make the messages container fill available space and scroll */
@@ -897,7 +921,7 @@ body {
   padding: 15px; /* Adjust padding to be consistent */
   display: flex;
   flex-direction: column;
-  min-height: 0; /* Important for Firefox */
+  /* Removed min-height: 0; */
 }
 
 /* Keep the input container at the bottom */
@@ -914,21 +938,29 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-y: auto; /* Allow vertical scrolling on the body if content overflows */
 }
 
 /* Make the main container take full height */
 .main-container {
-  padding: 0 16px 16px 16px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 75px); /* Adjust for header height */
-  overflow: hidden;
+  flex: 1; /* Make main container take remaining space */
+  height: calc(100vh - 32px);
 }
 
 /* Make project panel not flex grow */
 .project-panel {
-  flex: 0 0 auto;
+  background-color: var(--background-elevated);
+  border-radius: 4px;
+  padding: 16px; /* Increased padding for more whitespace */
+  margin-bottom: 20px; /* Increased margin for better separation */
+  border-bottom: 1px solid var(--border-color); /* Add a subtle divider */
+  flex: 0 0 auto; /* Prevent growing or shrinking */
+  overflow-y: auto; /* Make project panel scrollable if content overflows */
+  max-height: 300px; /* Set a maximum height for the project panel */
+  min-height: 0; /* Allow the element to shrink below its content size */
   /* Other existing styles... */
 }
 
@@ -936,8 +968,8 @@ body {
 .chat-section {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0; /* Important for Firefox */
+  flex: 1; /* Make chat section take remaining space */
+  min-height: 200px; /* Set a minimum height for the chat section */
   margin-bottom: 16px;
 }
 
@@ -950,9 +982,9 @@ body {
   height: auto; /* Remove the 300px fixed height */
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  overflow: hidden;
   background-color: var(--background-elevated);
   padding: 0px;
+  max-height: 100%;
 }
 
 /* Rest of your existing styles for messages-container can stay */
@@ -1011,6 +1043,11 @@ body {
   opacity: 1; /* Show on hover */
 }
 
+/* Hide default action buttons when in editing mode */
+.message.editing .message-actions .message-action-button:not(.edit-action-button) {
+    display: none;
+}
+
 .message-action-button {
   background: transparent;
   border: none;
@@ -1042,39 +1079,83 @@ body {
 /* Styles for the message editing area */
 .edit-area {
   width: 100%;
-  padding: 8px;
-  border: 1px solid var(--vscode-input-border);
+  padding: 0px;
+  border: none;
   border-radius: 4px;
-  background-color: var(--vscode-input-background);
+  background-color: transparent;
   color: var(--vscode-input-foreground);
-  resize: vertical; /* Allow vertical resize */
-  min-height: 50px; /* Minimum height for the textarea */
+  resize: none;
+  height: auto !important; /* Allow height to be determined by content and override other styles */
   font-family: inherit; /* Use the same font as the rest of the chat */
   font-size: inherit;
-  line-height: 1.4;
+  line-height: 1.5;
   margin-bottom: 5px;
   box-sizing: border-box; /* Ensure padding and border are included in width/height */
+  overflow: hidden; /* Prevent scrollbars */
 }
 
+.edit-area:focus {
+  outline: none;
+  border-color: transparent;
+}
+
+/* Style for the edit action buttons (Save & Resend, Cancel) */
 .edit-action-button {
-  padding: 4px 8px;
-  font-size: 12px;
+  width: 24px; /* Set a fixed width for icon buttons */
+  height: 24px; /* Set a fixed height for icon buttons */
+  padding: 0; /* Remove padding */
+  display: flex; /* Ensure they are displayed */
+  align-items: center;
+  justify-content: center; /* Center the icon */
   background-color: transparent;
-  color: var(--vscode-button-foreground);
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 3px;
+  color: var(--vscode-descriptionForeground); /* Use a subtle color */
+  border: none; /* Remove border */
+  border-radius: 3px; /* Match other icon button border radius */
   cursor: pointer;
-  margin-right: 5px;
+  transition: background-color 0.2s;
+  margin-right: 5px; /* Keep some margin */
 }
 
 .edit-action-button:hover {
-  background-color: var(--vscode-button-hoverBackground);
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15)); /* Subtle hover */
+  color: var(--vscode-editor-foreground); /* More prominent on hover */
+}
+
+.edit-action-button .codicon {
+    font-size: 14px; /* Adjust icon size */
+}
+
+/* Specific style for the Save & Resend button */
+.edit-action-button.save-resend-button {
+    color: var(--vscode-button-foreground); /* Use button foreground color for save */
+}
+
+.edit-action-button.save-resend-button:hover {
+    background-color: var(--vscode-button-hoverBackground); /* Use button hover background for save */
+}
+
+/* Specific style for the Cancel button */
+.edit-action-button.cancel-edit-button {
+    /* Inherits styles from .edit-action-button */
+}
+
+.edit-action-button.cancel-edit-button:hover {
+    /* Inherits hover styles from .edit-action-button */
 }
 
 /* Ensure user and AI messages align correctly with the new structure */
 .user-message {
   align-self: flex-end;
   /* Avatar and content will be handled by .message flex */
+}
+
+.user-message.editing {
+  width: 100%;
+  max-width: 100% !important;
+}
+
+.message.editing .message-content-wrapper {
+  width: 100%;
 }
 
 

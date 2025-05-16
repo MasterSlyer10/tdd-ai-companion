@@ -437,7 +437,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (this._view) {
         this._view.webview.postMessage({
             command: "updateCheckedItems",
-            checkedItems: this._checkedItems,
+            checkedItems: Array.from(this._checkedItems), // Ensure it's an array
+        });
+        // Also send a message to uncheck the item in the file tree
+        this._view.webview.postMessage({
+            command: "uncheckFileTreeItem",
+            path: file.fsPath,
         });
     }
     this.postSourceFilesUpdate();
@@ -493,16 +498,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/components/prism-python.min.js"></script>
         </head>
         <body>
-            <header class="app-header">
-                <div class="header-content">
-                    <h1>TDD AI Companion</h1>
-                    <span class="header-subtitle">Test suggestion assistant</span>
-                </div>
-            </header>
-    
             <div id="main-container" class="main-container">
                 <section class="project-panel">
-                    <h2 class="section-title">Project Configuration</h2>
+                    <div class="project-panel-header">
+                        <h2 class="section-title">Project Configuration</h2>
+                        <div class="settings-container">
+                            <button id="open-settings-button" class="icon-button" title="Open Extension Settings">
+                                <i class="codicon codicon-settings-gear"></i>
+                            </button>
+                        </div>
+                    </div>
                     <div class="panel-group">
 
                         <!-- Feature input -->
@@ -522,10 +527,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                                 <h3>Workspace Files</h3>
                                 <div class="tree-view-controls">
                                     <button id="refresh-tree" class="icon-button" title="Refresh">
-                                        <i class="codicon codicon-refresh"></i>
-                                    </button>
-                                    <button id="collapse-all" class="icon-button" title="Collapse All">
-                                        <i class="codicon codicon-collapse-all"></i>
+                                        <i class="codicon codicon-sync"></i>
                                     </button>
                                 </div>
                             </div>
@@ -558,9 +560,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="chat-header">
                         <h2 class="section-title">Test Suggestions</h2>
                         <div class="chat-header-actions">
-                            <button id="open-settings-button" class="icon-button" title="Open Extension Settings">
-                                <i class="codicon codicon-settings-gear"></i>
-                            </button>
                             <button id="new-chat-button" class="action-button" title="Start a new chat">
                                 <i class="codicon codicon-new-file"></i> New Chat
                             </button>
