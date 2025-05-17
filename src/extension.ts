@@ -67,13 +67,22 @@ export function activate(context: vscode.ExtensionContext) {
           });
 
           const abortController = new AbortController();
+          let sidebarTokenDisposable: vscode.Disposable | undefined;
+          let progressTokenDisposable: vscode.Disposable | undefined;
+
           if (cancellationToken) {
-            const disposable = cancellationToken.onCancellationRequested(() => {
+            sidebarTokenDisposable = cancellationToken.onCancellationRequested(() => {
               console.log("Cancellation requested via sidebar token.");
               abortController.abort();
-              disposable.dispose(); 
+              // No need to dispose sidebarTokenDisposable here, it's done in finally
             });
           }
+          // Also, if progressToken is cancelled (e.g., user clicks cancel on notification)
+          progressTokenDisposable = progressToken.onCancellationRequested(() => {
+            console.log("Cancellation requested via progress token.");
+            sidebarProvider.cancelCurrentRequest(); // Trigger our main cancellation
+            // No need to dispose progressTokenDisposable here, it's done in finally
+          });
 
 
           try {

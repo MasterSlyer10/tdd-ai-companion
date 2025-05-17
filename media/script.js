@@ -44,18 +44,25 @@
   });
 
   // Helper function to set the state of the send/stop button
-  function setSendButtonState(state) { // "send" or "stop"
+  function setSendButtonState(state) { // "send", "stop", or "stopping"
     if (!sendButton) return;
     sendButton.dataset.state = state;
+    sendButton.classList.remove('stop-button-animated'); // Remove animation class by default
+
     if (state === "stop") {
       sendButton.innerHTML = '<i class="codicon codicon-debug-stop"></i>'; // Use icon only
       sendButton.title = "Stop Generating";
       sendButton.classList.add('stop-button-animated'); // Add animation class
       if (chatInput) chatInput.disabled = true;
-    } else { // "send"
+    } else if (state === "stopping") {
+      sendButton.innerHTML = '<i class="codicon codicon-loading"></i>'; // Use loading icon
+      sendButton.title = "Stopping...";
+      sendButton.classList.add('stop-button-animated'); // Keep animation for stopping state
+      if (chatInput) chatInput.disabled = true; // Keep input disabled while stopping
+    }
+     else { // "send"
       sendButton.innerHTML = '<i class="codicon codicon-send"></i>';
       sendButton.title = "Send Request";
-      sendButton.classList.remove('stop-button-animated'); // Remove animation class
       if (chatInput) chatInput.disabled = false;
     }
   }
@@ -824,13 +831,10 @@
     if (sendButton.dataset.state === "stop") {
       console.log("Stop button clicked");
       vscode.postMessage({ command: "cancelRequest" });
-      setSendButtonState("send");
-      // Optionally, remove loading indicator and add a "cancelled" message immediately
-      const loadingIndicators = chatMessages.querySelectorAll(".loading-indicator");
-      loadingIndicators.forEach((indicator) => indicator.remove());
-      // It might be better for the extension to confirm cancellation before webview fully resets UI for loading.
-      // For now, let's assume immediate UI reversion is okay.
-      // addMessageToChat("Request cancelled by user.", false); // Consider if this message is desired
+      setSendButtonState("stopping"); // Change to Stopping button and keep loading indicator
+      isRequestCancelled = true; // Set cancellation flag immediately on client side
+      // Do NOT immediately remove loading indicator or reset to "send" state here.
+      // Wait for the 'requestCancelled' message from the extension.
     } else {
       console.log("Send button clicked (from handleSendOrStopClick)");
       sendChatMessage();
@@ -1110,11 +1114,14 @@
 
   // This function is called when an AI response or a system message (like "cancelled") is added.
   // It should ensure the UI (button, input) is in the correct state.
+  // This function is now primarily called when a response is *successfully* received.
+  // Cancellation UI reset is handled specifically in the 'requestCancelled' message handler.
   function finalizeChatTurn() {
-    setSendButtonState("send"); // Revert to send state
-    // chatInput.disabled = false; // This is handled by setSendButtonState
-    const loadingIndicators = chatMessages.querySelectorAll(".loading-indicator");
-    loadingIndicators.forEach((indicator) => indicator.remove());
+    // Only revert to send state if not currently in a stopping state (waiting for cancellation confirmation)
+    if (sendButton && sendButton.dataset.state !== "stopping") {
+       setSendButtonState("send"); // Revert to send state
+    }
+    // Loading indicators are removed either by addMessageToChat or by the requestCancelled handler.
   }
 
   //
@@ -1732,17 +1739,19 @@
         finalizeChatTurn(); // Ensure UI is reset after processing response
         break;
 
-      case "requestCancelled": // New message from extension if cancellation was successful
+      case "requestCancelled": // Message from extension confirming cancellation attempt
         console.log("[Webview] Received requestCancelled message.");
-        // Explicitly remove loading indicators before adding the cancellation message
+        // Now that the extension has confirmed cancellation attempt, fully reset UI
         const loadingIndicatorsOnCancel = chatMessages.querySelectorAll(".loading-indicator");
         loadingIndicatorsOnCancel.forEach((indicator) => {
-            console.log("[Webview] Removing loading indicator on cancellation.");
+            console.log("[Webview] Removing loading indicator on cancellation confirmation.");
             indicator.remove();
         });
         addMessageToChat("AI request cancelled.", false); // System message
-        console.log("[Webview] Added cancellation message. Finalizing chat turn.");
-        finalizeChatTurn(); // Ensure UI is reset on cancellation
+        setSendButtonState("send"); // Fully reset button state
+        if (chatInput) chatInput.disabled = false; // Ensure input is enabled
+        console.log("[Webview] Added cancellation message and finalized UI.");
+        // No need to call finalizeChatTurn here, as UI is explicitly set.
         break;
 
       case "generationFailed": // New message to handle generation errors

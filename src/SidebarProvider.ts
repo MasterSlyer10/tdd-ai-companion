@@ -22,6 +22,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   // Update the chat history type
   private _chatHistory: ChatMessage[] = [];
   private _cancellationTokenSource?: vscode.CancellationTokenSource;
+  private _isCurrentRequestCancelled: boolean = false; // Add internal cancellation flag
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -238,13 +239,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   public cancelCurrentRequest() {
     if (this._cancellationTokenSource) {
+      this._isCurrentRequestCancelled = true; // Set internal flag
       this._cancellationTokenSource.cancel();
       this._cancellationTokenSource.dispose();
       this._cancellationTokenSource = undefined;
       if (this._view) {
         this._view.webview.postMessage({ command: "requestCancelled" });
-        // Optionally, add a message to chat history here as well, or let webview handle it.
-        // this.addResponse("Request cancelled by user.", 0, 0); // Example if counting cancelled requests
       }
       console.log("Request cancellation attempted.");
     }
@@ -252,16 +252,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   // Call this method from extension.ts after a request completes or errors out
   public finalizeRequest() {
+    // This method is called when the request in extension.ts finishes (either success or error/abort).
+    // We should dispose the CTS here if it still exists, but NOT reset the _isCurrentRequestCancelled flag.
+    // The flag is reset in addResponse when a response is successfully processed, or implicitly when a new request starts.
     if (this._cancellationTokenSource) {
       this._cancellationTokenSource.dispose();
       this._cancellationTokenSource = undefined;
     }
-    // Ensure webview UI is reset if it hasn't been already (e.g. by addResponse)
-    if (this._view) {
-        // This might be redundant if addResponse or requestCancelled already reset the UI.
-        // Consider if a more specific "finalizeUI" message is needed or if current ones are sufficient.
-        // For now, let's assume addResponse/requestCancelled handle UI reset.
-    }
+    // The webview UI reset is handled by receiving the 'requestCancelled' message (if cancelled)
+    // or by the 'addResponse' handler (if completed).
   }
 
 
@@ -307,9 +306,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
-    // Check if cancellation has been requested
-    if (this._cancellationTokenSource && this._cancellationTokenSource.token.isCancellationRequested) {
-        console.log("Cancellation requested, not adding response.");
+    // Check if the request was cancelled internally
+    if (this._isCurrentRequestCancelled) {
+        console.log("Request was cancelled internally, not adding response.");
+        this._isCurrentRequestCancelled = false; // Reset flag for the next request
         return; // Do not add response if cancelled
     }
 
