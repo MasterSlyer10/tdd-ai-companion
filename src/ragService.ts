@@ -96,11 +96,24 @@ export class RAGService {
    */
   public async retrieveRelevantCode(
     query: string,
-    maxResults: number = 15
+    maxResults: number = 15,
+    abortSignal?: AbortSignal
   ): Promise<CodeChunk[]> {
     try {
-      return await this.embeddingService.querySimilarChunks(query, maxResults);
+      // Check for cancellation before starting
+      if (abortSignal && abortSignal.aborted) {
+        console.log("RAGService: Retrieval cancelled before starting");
+        return [];
+      }
+      
+      return await this.embeddingService.querySimilarChunks(query, maxResults, abortSignal);
     } catch (error) {
+      // Check if this was an abort error
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log("RAGService: Retrieval was cancelled");
+        return [];
+      }
+      
       console.error("Error retrieving relevant code:", error);
       vscode.window.showErrorMessage(
         `Failed to retrieve relevant code: ${error}`

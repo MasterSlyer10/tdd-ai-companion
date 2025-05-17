@@ -567,13 +567,13 @@ export class EmbeddingService {
       );
     }
   }
-
   /**
    * Query similar code chunks based on a text query
    */
   public async querySimilarChunks(
     query: string,
-    topK: number = 5
+    topK: number = 5,
+    abortSignal?: AbortSignal
   ): Promise<CodeChunk[]> {
     if (!this.initialized) {
       const success = await this.initialize();
@@ -583,15 +583,39 @@ export class EmbeddingService {
     }
 
     try {
+      // Check for cancellation before starting
+      if (abortSignal && abortSignal.aborted) {
+        console.log("EmbeddingService: Query cancelled before starting");
+        const abortError = new Error("Query was cancelled");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
+
       if (!this.pineconeClient) {
         throw new Error("Pinecone client not initialized");
       }
 
       // Check if we need to index the project
       await this.autoIndexIfNeeded();
+      
+      // Check for cancellation before embedding generation
+      if (abortSignal && abortSignal.aborted) {
+        console.log("EmbeddingService: Query cancelled before embedding generation");
+        const abortError = new Error("Query was cancelled");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
 
       // Generate embedding for the query using the same method
       const queryEmbedding = await this.generateEmbedding(query);
+      
+      // Check for cancellation before Pinecone query
+      if (abortSignal && abortSignal.aborted) {
+        console.log("EmbeddingService: Query cancelled before Pinecone query");
+        const abortError = new Error("Query was cancelled");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
 
       // Query Pinecone
       const index = this.pineconeClient.index(this.indexName);
@@ -604,6 +628,14 @@ export class EmbeddingService {
           projectId: this.projectId, // Add project ID filter
         },
       });
+
+      // Final cancellation check after Pinecone query
+      if (abortSignal && abortSignal.aborted) {
+        console.log("EmbeddingService: Query cancelled after Pinecone query");
+        const abortError = new Error("Query was cancelled");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
 
       console.log(
         `Retrieved ${queryResult.matches.length} matches from Pinecone`

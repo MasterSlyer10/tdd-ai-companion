@@ -1711,6 +1711,12 @@
         // Check if the request has been cancelled, if so ignore this chunk
         if (isRequestCancelled) {
           console.log("[Stream Debug] Request was cancelled, ignoring this chunk");
+          // Don't just return - actively remove any partially streamed message
+          const partialMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
+          if (partialMessage) {
+            console.log("[Stream Debug] Removing partial message due to cancellation");
+            partialMessage.remove();
+          }
           return;
         }
         
@@ -1915,9 +1921,15 @@
       case "endResponseStream":
         console.log("[Stream Debug] Received endResponseStream command");
         
-        // If the request was cancelled, don't process the end response
+        // If the request was cancelled, don't process the end response and ensure any partial message is removed
         if (isRequestCancelled) {
           console.log("[Stream Debug] Request was cancelled, ignoring endResponseStream");
+          // Remove any streaming message that may have been partially created
+          const partialStreamedMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
+          if (partialStreamedMessage) {
+            console.log("[Stream Debug] Removing partial streamed message during endResponseStream");
+            partialStreamedMessage.remove();
+          }
           return;
         }
         
@@ -2146,6 +2158,9 @@
       case "requestCancelled": // Message from extension confirming cancellation attempt
         console.log("[Webview] Received requestCancelled message.");
         // Now that the extension has confirmed cancellation attempt, fully reset UI
+        
+        // Set cancellation flag (in case it wasn't already set)
+        isRequestCancelled = true;
         
         // Remove any loading indicators
         const loadingIndicatorsOnCancel = chatMessages.querySelectorAll(".loading-indicator");

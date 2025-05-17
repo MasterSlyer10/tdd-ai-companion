@@ -530,15 +530,27 @@ async function callGenerativeApi(
   console.log("[RAG Components] Current Feature:", currentFeature);
 
   let enhancedPromptContent = prompt; // Start with the original query
-
   try {
+    // Check for cancellation before starting RAG process
+    if (abortSignal && abortSignal.aborted) {
+      console.log("[RAG Components] Request cancelled before starting RAG process");
+      throw new Error("Request cancelled");
+    }
+
     // Ensure config is available in this scope if not already
     // const config = vscode.workspace.getConfiguration("tddAICompanion"); 
     const pineconeApiKey = config.get("pineconeApiKey") as string;
 
     if (pineconeApiKey) {
       console.log("[RAG Components] Pinecone configured. Attempting to retrieve relevant code chunks...");
-      const relevantChunks = await ragService.retrieveRelevantCode(prompt); // Use original query for retrieval
+      // Pass abort signal to the RAG service
+      const relevantChunks = await ragService.retrieveRelevantCode(prompt, 15, abortSignal); // Use original query for retrieval
+      
+      // Check if the request was cancelled during retrieval
+      if (abortSignal && abortSignal.aborted) {
+        console.log("[RAG Components] Request cancelled during code retrieval");
+        throw new Error("Request cancelled");
+      }
       
       if (relevantChunks.length > 0) {
         console.log(`[RAG Components] Found ${relevantChunks.length} relevant code chunks.`);
