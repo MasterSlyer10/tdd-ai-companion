@@ -141,27 +141,50 @@
           
           console.log("Global handler: Toggling thinking section");
           
+          // Get content before toggling class
+          const content = thinkingSection.querySelector('.thinking-content');
+          
           // Toggle the collapsed class
-          thinkingSection.classList.toggle('collapsed');
           const wasCollapsed = thinkingSection.classList.contains('collapsed');
           
           // Update the icon
           const icon = thinkingSection.querySelector('.thinking-toggle i');
           if (icon) {
             icon.className = wasCollapsed ? 
-                            'codicon codicon-chevron-right' : 
-                            'codicon codicon-chevron-down';
+                            'codicon codicon-chevron-down' : 
+                            'codicon codicon-chevron-right';
           }
           
           // Handle content visibility and padding
-          const content = thinkingSection.querySelector('.thinking-content');
           if (content) {
-            if (!wasCollapsed) {
+            if (wasCollapsed) {
               // Make content visible immediately when expanding
+              content.style.display = 'block';
               content.style.visibility = 'visible';
+              content.style.opacity = '1';
+              content.style.maxHeight = '500px';
               content.style.paddingTop = '10px';
               content.style.paddingBottom = '10px';
+              content.style.transform = 'scaleY(1)';
+              
+              // Toggle class after setting styles for expansion
+              thinkingSection.classList.remove('collapsed');
+            } else {
+              // Hide content immediately when collapsing
+              content.style.display = 'none';
+              content.style.visibility = 'hidden';
+              content.style.opacity = '0';
+              content.style.maxHeight = '0';
+              content.style.paddingTop = '0';
+              content.style.paddingBottom = '0';
+              content.style.transform = 'scaleY(0)';
+              
+              // Toggle class after setting styles for collapse
+              thinkingSection.classList.add('collapsed');
             }
+          } else {
+            // If no content element found, just toggle the class
+            thinkingSection.classList.toggle('collapsed');
           }
         }
       }
@@ -1684,6 +1707,13 @@
         
       case "appendResponseChunk":
         console.log("[Stream Debug] Received appendResponseChunk command. Chunk:", message.chunk, "Is first chunk:", message.isFirstChunk);
+        
+        // Check if the request has been cancelled, if so ignore this chunk
+        if (isRequestCancelled) {
+          console.log("[Stream Debug] Request was cancelled, ignoring this chunk");
+          return;
+        }
+        
         // Find the streaming message element
         const currentStreamingMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
         if (!currentStreamingMessage) {
@@ -1884,6 +1914,13 @@
         
       case "endResponseStream":
         console.log("[Stream Debug] Received endResponseStream command");
+        
+        // If the request was cancelled, don't process the end response
+        if (isRequestCancelled) {
+          console.log("[Stream Debug] Request was cancelled, ignoring endResponseStream");
+          return;
+        }
+        
         // Find the streaming message element
         const streamedMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
         if (!streamedMessage) {
@@ -1957,7 +1994,6 @@
             
             // Auto-collapse thinking section now that we're done streaming
             console.log("[Stream Debug] Auto-collapsing thinking section after streaming");
-            thinkingSectionFinal.classList.add('collapsed');
             const icon = thinkingSectionFinal.querySelector('.thinking-toggle i');
             if (icon) {
               icon.className = 'codicon codicon-chevron-right';
@@ -1966,16 +2002,18 @@
             // Ensure content styles are also updated when collapsing
             const content = thinkingSectionFinal.querySelector('.thinking-content');
             if (content) {
-              // These will be transitioned via CSS but set them explicitly as well 
-              // to ensure consistent state
-              setTimeout(() => {
-                if (thinkingSectionFinal.classList.contains('collapsed')) {
-                  content.style.visibility = 'hidden';
-                  content.style.paddingTop = '0';
-                  content.style.paddingBottom = '0';
-                }
-              }, 200); // Small delay to allow CSS transitions to start
+              // Set all styles immediately
+              content.style.display = 'none';
+              content.style.visibility = 'hidden';
+              content.style.opacity = '0';
+              content.style.maxHeight = '0';
+              content.style.paddingTop = '0';
+              content.style.paddingBottom = '0';
+              content.style.transform = 'scaleY(0)';
             }
+            
+            // Apply collapsed class after setting styles
+            thinkingSectionFinal.classList.add('collapsed');
           }
         }
         // Standard final render if no thinking/answer markers
@@ -2108,11 +2146,21 @@
       case "requestCancelled": // Message from extension confirming cancellation attempt
         console.log("[Webview] Received requestCancelled message.");
         // Now that the extension has confirmed cancellation attempt, fully reset UI
+        
+        // Remove any loading indicators
         const loadingIndicatorsOnCancel = chatMessages.querySelectorAll(".loading-indicator");
         loadingIndicatorsOnCancel.forEach((indicator) => {
             console.log("[Webview] Removing loading indicator on cancellation confirmation.");
             indicator.remove();
         });
+        
+        // Remove any currently streaming message
+        const streamingMessageOnCancel = document.querySelector('.message.ai-message[data-streaming="true"]');
+        if (streamingMessageOnCancel) {
+            console.log("[Webview] Removing streaming message on cancellation.");
+            streamingMessageOnCancel.remove();
+        }
+        
         addMessageToChat("AI request cancelled.", false); // System message
         setSendButtonState("send"); // Fully reset button state
         if (chatInput) chatInput.disabled = false; // Ensure input is enabled

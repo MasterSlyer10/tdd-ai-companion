@@ -82,20 +82,36 @@ export function activate(context: vscode.ExtensionContext) {
             console.log("Cancellation requested via progress token.");
             sidebarProvider.cancelCurrentRequest(); // Trigger our main cancellation
             // No need to dispose progressTokenDisposable here, it's done in finally
-          });
-
-
-          try {
+          });          try {
             // Add the user message to history before making the API call
             sidebarProvider.addUserMessage(userMessage);
+
+            // Check if cancellation was already requested before we start
+            if (abortController.signal.aborted) {
+              console.log("[suggestTestCaseCommand] Request was already cancelled before fetching content");
+              return;
+            }
 
             // Gather context from files
             const sourceContent = await readFilesContent(
               sidebarProvider.getSourceFiles()
             );
+            
+            // Check for cancellation after getting source content
+            if (abortController.signal.aborted) {
+              console.log("[suggestTestCaseCommand] Request cancelled after fetching source content");
+              return;
+            }
+            
             const testContent = await readFilesContent(
               sidebarProvider.getTestFiles()
             );
+            
+            // Check for cancellation after getting test content
+            if (abortController.signal.aborted) {
+              console.log("[suggestTestCaseCommand] Request cancelled after fetching test content");
+              return;
+            }
 
             // Get currently open file
             let currentFileContext = "";
@@ -121,8 +137,20 @@ export function activate(context: vscode.ExtensionContext) {
             console.log("[suggestTestCaseCommand] Value of 'prompt' variable before calling callGenerativeApi:", prompt);
             console.log("[suggestTestCaseCommand] Conversation history before calling callGenerativeApi:", JSON.stringify(conversationHistory, null, 2));
 
+            // Check for cancellation before making API call
+            if (abortController.signal.aborted) {
+              console.log("[suggestTestCaseCommand] Request cancelled before API call");
+              return;
+            }
+
             // Call the Gemini API with streaming (callGenerativeApi now returns an object)
             const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal);
+            
+            // Check if cancelled after API call completed
+            if (abortController.signal.aborted) {
+              console.log("[suggestTestCaseCommand] Request was cancelled during or after API call");
+              return; // Don't process the response if cancelled
+            }
             
             // The responses are now streamed directly to the webview, but we still need to:
             // 1. Save the complete response to the conversation history
@@ -134,9 +162,11 @@ export function activate(context: vscode.ExtensionContext) {
             const totalInputTokens = Math.ceil(JSON.stringify(llmInputPayload).length / 4);
             
             // Update the conversation history with the complete response
-            sidebarProvider.updateLastResponse(responseText, responseTokenCount, totalInputTokens);
-            
-          } catch (error: any) {
+            // Only if not cancelled
+            if (!abortController.signal.aborted) {
+              sidebarProvider.updateLastResponse(responseText, responseTokenCount, totalInputTokens);
+            }
+            } catch (error: any) {
             if (error.name === 'AbortError') {
               console.log("[suggestTestCaseCommand] Fetch request aborted successfully.");
               // The SidebarProvider's cancelCurrentRequest already posts 'requestCancelled'
@@ -557,7 +587,7 @@ async function callGenerativeApi(
     const requestBody = {
       contents,
       systemInstruction: {
-        parts: [{ text: "Structure your response in two sections:\n\n1. Begin with '**Thinking:**' followed by your detailed analysis, reasoning process, and considerations. This is where you work through the problem.\n\n2. Follow with '**Answer:**' and format your answer with clear headings, bullet points, and code blocks as appropriate. Make the answer section well-structured and easy to read. Ensure code examples are properly formatted in markdown code blocks with the appropriate language specified.\n\nDo not include any meta-commentary about the format itself. Just use the headings '**Thinking:**' and '**Answer:**' directly followed by your content for each section." }]
+        parts: [{ text: "You MUST ALWAYS structure your response in exactly two sections:\n\n1. ALWAYS begin with '**Thinking:**' followed by your detailed analysis, reasoning process, and considerations. This section is REQUIRED in every response and should contain at least 100 words showing your reasoning process. Never skip this section.\n\n2. Then ALWAYS follow with '**Answer:**' and format your answer with clear headings, bullet points, and code blocks as appropriate. Make this section well-structured and easy to read.\n\nEnsure code examples are properly formatted in markdown code blocks with the appropriate language specified. Both sections are mandatory for every response. Do not deviate from this format. Do not include any meta-commentary about the format itself." }]
       }
     };
 
@@ -709,22 +739,29 @@ async function callGenerativeApi(
         } catch (e) {
           console.error("[SSE Debug] Error parsing final SSE message JSON:", e, data);
         }
-      }
-    } catch (error: unknown) {
+      }    } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.log("Stream reading aborted");
+        // Don't send any more messages to the webview for aborted requests
+        // We'll let the outer try/catch handle this by checking the cancellation flag
         throw error; // Re-throw AbortError to be caught in the outer catch block
       }
       console.error("Error reading stream:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Error reading stream: ${errorMessage}`);
     } finally {
-      // Send a message to indicate the stream is complete, regardless of how we exited the loop
-      if (sidebarProvider && sidebarProvider._view) {
-        sidebarProvider._view.webview.postMessage({
-          command: "endResponseStream",
-          fullResponse: responseText
-        });
+      // Only send the completion message if we weren't cancelled
+      // Check if the abort signal was triggered
+      if (!(abortSignal && abortSignal.aborted)) {
+        // Send a message to indicate the stream is complete
+        if (sidebarProvider && sidebarProvider._view) {
+          sidebarProvider._view.webview.postMessage({
+            command: "endResponseStream",
+            fullResponse: responseText
+          });
+        }
+      } else {
+        console.log("Stream was aborted, not sending endResponseStream command");
       }
     }
 
@@ -733,13 +770,21 @@ async function callGenerativeApi(
     // Estimate token count for the entire input payload
     const totalInputTokens = Math.ceil(JSON.stringify(contents).length / 4);
 
-    return { responseText, llmInputPayload: contents };
-  } catch (error) {
-    console.error("Error calling Gemini API:", error);
-    // Send a message to the webview indicating generation failure
-    if (sidebarProvider) { // Use sidebarProvider directly
-        sidebarProvider.addResponse("AI failed to generate a response."); // Use addResponse
+    return { responseText, llmInputPayload: contents };  } catch (error) {
+    // Check if it's an abort error (cancellation)
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log("API call aborted due to cancellation");
+      // Don't show any error messages for deliberate cancellations
+      throw error; // Re-throw so the calling code knows it was cancelled
     }
+    
+    console.error("Error calling Gemini API:", error);
+    
+    // Only send a failure message if it wasn't a cancellation
+    if (sidebarProvider && !(abortSignal && abortSignal.aborted)) {
+        sidebarProvider.addResponse("AI failed to generate a response."); 
+    }
+    
     throw new Error(
       `Failed to get test suggestions from Gemini API: ${
         error instanceof Error ? error.message : String(error)

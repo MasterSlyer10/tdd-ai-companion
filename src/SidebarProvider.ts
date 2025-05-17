@@ -303,14 +303,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         files: this._testFiles.map((f) => f.fsPath),
       });
     }
-  }
-
-  public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
+  }  public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
     // Check if the request was cancelled internally
-    if (this._isCurrentRequestCancelled) {
-        console.log("Request was cancelled internally, not adding response.");
+    if (this._isCurrentRequestCancelled || this._cancellationTokenSource === undefined) {
+        console.log("Request was cancelled internally or no active token source, not adding response.");
         this._isCurrentRequestCancelled = false; // Reset flag for the next request
-        return; // Do not add response if cancelled
+        return; // Do not add response if cancelled or no active request
     }
 
     // If the response is empty, provide a default message
@@ -335,16 +333,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         messagePayload.totalInputTokens = totalInputTokens;
       }
       this._view.webview.postMessage(messagePayload);
-    }
-  }
+    }  }
 
   // For use with streaming responses
   public updateLastResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
-    // Check if the request was cancelled internally
-    if (this._isCurrentRequestCancelled) {
-        console.log("Request was cancelled internally, not updating response.");
+    // Check if the request was cancelled internally 
+    if (this._isCurrentRequestCancelled || this._cancellationTokenSource === undefined) {
+        console.log("Request was cancelled internally or no active token source, not updating response.");
         this._isCurrentRequestCancelled = false; // Reset flag for the next request
-        return; // Do not update response if cancelled
+        return; // Do not update response if cancelled or no active request
     }
 
     // If the response is empty, provide a default message

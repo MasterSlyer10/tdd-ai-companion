@@ -1295,12 +1295,9 @@ body {
   visibility: hidden;
   opacity: 0;
   transform: scaleY(0);
-  transition: 
-    max-height 0.2s ease-out, 
-    padding 0.1s ease-out, 
-    opacity 0.2s ease-out,
-    transform 0.2s ease-out,
-    visibility 0s 0.2s; /* Delay hiding visibility until after other transitions */
+  display: none;
+  /* Remove transition for collapsing to make it instant */
+  transition: none;
 }
 
 /* Explicitly set the border display for collapsed state */
