@@ -107,6 +107,65 @@
         removeContextMenu();
       }
     });
+    
+    // Add global document-level click handler for all thinking section toggles
+    document.addEventListener("click", (e) => {
+      // Check if the clicked element is a thinking header or its child
+      let target = e.target;
+      let thinkingHeader = null;
+      
+      // Check if we clicked the header itself
+      if (target.classList && target.classList.contains('thinking-header')) {
+        thinkingHeader = target;
+      } 
+      // Check if we clicked the toggle button or its icon
+      else if (target.classList && 
+          (target.classList.contains('thinking-toggle') || 
+           (target.parentElement && target.parentElement.classList.contains('thinking-toggle')))) {
+        // Get the header (parent of toggle button or grandparent of icon)
+        thinkingHeader = target.classList.contains('thinking-toggle') ? 
+                        target.parentElement : 
+                        target.parentElement.parentElement;
+      }
+      // Check if we clicked on the title text
+      else if (target.classList && target.classList.contains('thinking-title')) {
+        thinkingHeader = target.parentElement;
+      }
+      
+      // If we found a thinking header, toggle its section
+      if (thinkingHeader) {
+        const thinkingSection = thinkingHeader.parentElement;
+        if (thinkingSection && thinkingSection.classList.contains('thinking-section')) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          console.log("Global handler: Toggling thinking section");
+          
+          // Toggle the collapsed class
+          thinkingSection.classList.toggle('collapsed');
+          const wasCollapsed = thinkingSection.classList.contains('collapsed');
+          
+          // Update the icon
+          const icon = thinkingSection.querySelector('.thinking-toggle i');
+          if (icon) {
+            icon.className = wasCollapsed ? 
+                            'codicon codicon-chevron-right' : 
+                            'codicon codicon-chevron-down';
+          }
+          
+          // Handle content visibility and padding
+          const content = thinkingSection.querySelector('.thinking-content');
+          if (content) {
+            if (!wasCollapsed) {
+              // Make content visible immediately when expanding
+              content.style.visibility = 'visible';
+              content.style.paddingTop = '10px';
+              content.style.paddingBottom = '10px';
+            }
+          }
+        }
+      }
+    });
   }
 
   function setupEventListeners() {
@@ -1358,162 +1417,6 @@
     // Add 'editing' class to the message element
     messageElement.classList.add('editing');
 
-    // Add 'editing' class to the message element
-    messageElement.classList.add('editing');
-
-    contentElement.innerHTML = ''; // Clear current content (e.g., the static text)
-
-    const editArea = document.createElement('textarea');
-    editArea.className = 'edit-area';
-    editArea.value = originalRawContent; // Use the raw text for editing
-
-    // Attempt to remove any conflicting inline height style
-    editArea.style.removeProperty('height');
-
-    // Auto-resize textarea
-    editArea.style.height = 'auto';
-    // Set scroll position to the top to show the beginning of the text
-    editArea.scrollTop = 0;
-
-    // Use requestAnimationFrame to allow the browser to calculate scrollHeight correctly after repaint
-    requestAnimationFrame(() => {
-        editArea.style.height = 'auto'; // Ensure height is auto before calculating scrollHeight
-        editArea.style.height = (editArea.scrollHeight) + 'px';
-        // Set scroll position to the top after height is adjusted
-        editArea.scrollTop = 0;
-    });
-
-    editArea.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
-    });
-
-    const reloadAndSaveButton = document.createElement('button');
-    reloadAndSaveButton.textContent = 'Save & Resend';
-    reloadAndSaveButton.className = 'edit-action-button'; // Reuse existing class or create a new one
-    reloadAndSaveButton.title = 'Save changes, delete subsequent messages, resend, and refresh file tree';
-
-    reloadAndSaveButton.onclick = () => {
-      const newContent = editArea.value.trim();
-      if (newContent === "") {
-        alert("Message cannot be empty.");
-        return;
-      }
-
-      // 1. Update UI: Exit edit mode by replacing textarea with new text
-      contentElement.innerHTML = '';
-      contentElement.textContent = newContent;
-      messageElement.dataset.rawText = newContent;
-
-      // 2. Delete all subsequent messages
-      let currentMsg = messageElement.nextElementSibling;
-      while (currentMsg) {
-        const toRemove = currentMsg;
-        currentMsg = currentMsg.nextElementSibling;
-        if (chatMessages.contains(toRemove)) {
-          chatMessages.removeChild(toRemove);
-        }
-      }
-
-      // 3. Save chat history
-      saveChatHistory();
-
-      // 4. Display loading indicator and resend the edited message
-      const loadingElement = document.createElement("div");
-      loadingElement.className = "loading-indicator";
-      loadingElement.textContent = "Generating response...";
-      chatMessages.appendChild(loadingElement); // Append to main chat area
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-
-      vscode.postMessage({
-        command: "requestTestSuggestion",
-        message: newContent,
-      });
-
-      // 5. Refresh file tree (as per original "reload" functionality)
-      requestWorkspaceFiles();
-    };
-
-    // Find the existing message-actions container
-    const actionsElement = messageElement.querySelector('.message-actions');
-    if (!actionsElement) {
-        console.error("Message actions container not found for editing.");
-        // Fallback: just append the edit area and buttons below the content if actions not found
-        const buttonContainer = document.createElement('div');
-        buttonContainer.style.marginTop = '5px';
-        buttonContainer.appendChild(reloadAndSaveButton);
-
-        const cancelButton = document.createElement('button');
-        cancelButton.textContent = 'Cancel';
-        cancelButton.className = 'edit-action-button cancel-edit-button';
-        cancelButton.title = 'Cancel editing';
-        cancelButton.onclick = () => {
-          // Restore original content and remove edit UI
-          contentElement.innerHTML = ''; // Clear textarea and buttons
-          contentElement.textContent = originalRawContent; // Restore text
-          // messageElement.dataset.rawText remains the value from before this edit attempt
-        };
-        buttonContainer.appendChild(cancelButton);
-
-        contentElement.appendChild(editArea);
-        contentElement.appendChild(buttonContainer);
-        editArea.focus();
-        return; // Exit the function after fallback
-    }
-
-    // Hide the original action buttons (copy, edit, delete)
-    actionsElement.querySelectorAll('.message-action-button:not(.edit-action-button)').forEach(btn => {
-        btn.style.display = 'none';
-    });
-
-    // Append the edit area and the new buttons
-    contentElement.appendChild(editArea);
-
-    // Append the new buttons to the actions container
-    actionsElement.appendChild(reloadAndSaveButton);
-    actionsElement.appendChild(cancelButton);
-
-    // Ensure actions container is visible in edit mode
-    actionsElement.style.opacity = 1;
-    actionsElement.style.display = 'flex'; // Ensure flex display
-
-    editArea.focus();
-  }
-
-  // Function to restore original actions visibility when editing is cancelled or saved
-  function restoreOriginalActions(messageElement) {
-      const actionsElement = messageElement.querySelector('.message-actions');
-      if (actionsElement) {
-          // Remove edit action buttons
-          actionsElement.querySelectorAll('.edit-action-button').forEach(btn => {
-              if (btn.parentNode) {
-                  btn.parentNode.removeChild(btn);
-              }
-          });
-          // Show original action buttons
-          actionsElement.querySelectorAll('.message-action-button').forEach(btn => {
-              btn.style.display = 'flex'; // Or whatever the default display was
-          });
-          // Restore opacity based on hover (or keep visible if needed)
-          // actionsElement.style.opacity = 0; // Will be shown on hover by CSS
-      }
-  }
-
-  // Modify the onclick handlers of the edit action buttons to call restoreOriginalActions
-  // This needs to be done *after* the buttons are created and before they are appended.
-  // Let's adjust the handleEditUserMessage function again.
-  // (Self-correction: Instead of modifying the existing function, let's refine the logic within it.)
-
-  // Refined handleEditUserMessage (incorporating the logic above)
-  function handleEditUserMessage(messageElement, contentElement, originalRawContent) {
-    // Prevent editing if already in edit mode
-    if (contentElement.querySelector('textarea.edit-area')) {
-      return;
-    }
-
-    // Add 'editing' class to the message element
-    messageElement.classList.add('editing');
-
     contentElement.innerHTML = ''; // Clear current content (e.g., the static text)
 
     const editArea = document.createElement('textarea');
@@ -1529,12 +1432,12 @@
     });
 
     const reloadAndSaveButton = document.createElement('button');
-    reloadAndSaveButton.innerHTML = '<i class="codicon codicon-save"></i>'; // Use save icon
+    reloadAndSaveButton.textContent = 'Save & Resend';
     reloadAndSaveButton.className = 'edit-action-button save-resend-button'; // Add a specific class
     reloadAndSaveButton.title = 'Save changes, delete subsequent messages, resend, and refresh file tree';
 
     const cancelButton = document.createElement('button');
-    cancelButton.innerHTML = '<i class="codicon codicon-close"></i>'; // Use close icon
+    cancelButton.textContent = 'Cancel';
     cancelButton.className = 'edit-action-button cancel-edit-button'; // Add a specific class
     cancelButton.title = 'Cancel editing';
 
@@ -1739,6 +1642,469 @@
         finalizeChatTurn(); // Ensure UI is reset after processing response
         break;
 
+      case "startResponseStream":
+        console.log("[Stream Debug] Received startResponseStream command");
+        // Remove any loading indicators before we start streaming
+        document.querySelectorAll(".loading-indicator").forEach(indicator => indicator.remove());
+        
+        // Create a new message element for the streaming response
+        const streamingMessageElement = document.createElement("div");
+        streamingMessageElement.id = `msg-${messageIdCounter++}`;
+        streamingMessageElement.className = "message ai-message";
+        streamingMessageElement.dataset.streaming = "true"; // Mark as streaming
+        console.log("[Stream Debug] Created streaming message element with ID:", streamingMessageElement.id);
+        
+        // Add avatar
+        const avatarElement = document.createElement("div");
+        avatarElement.className = "message-avatar";
+        avatarElement.innerHTML = '<i class="codicon codicon-beaker"></i>';
+        streamingMessageElement.appendChild(avatarElement);
+        
+        // Add content container
+        const contentElement = document.createElement("div");
+        contentElement.className = "message-content";
+        
+        // Create wrapper for content and actions
+        const contentWrapper = document.createElement("div");
+        contentWrapper.className = "message-content-wrapper";
+        contentWrapper.appendChild(contentElement);
+        
+        // Add the actions container (initially empty)
+        const actionsElement = document.createElement("div");
+        actionsElement.className = "message-actions";
+        contentWrapper.appendChild(actionsElement);
+        
+        streamingMessageElement.appendChild(contentWrapper);
+        chatMessages.appendChild(streamingMessageElement);
+        console.log("[Stream Debug] Streaming message element added to DOM");
+        
+        // Scroll to the bottom to show the new message
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        break;
+        
+      case "appendResponseChunk":
+        console.log("[Stream Debug] Received appendResponseChunk command. Chunk:", message.chunk, "Is first chunk:", message.isFirstChunk);
+        // Find the streaming message element
+        const currentStreamingMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
+        if (!currentStreamingMessage) {
+          console.error("[Stream Debug] No streaming message element found to append chunk");
+          return;
+        }
+        
+        const contentEl = currentStreamingMessage.querySelector('.message-content');
+        if (!contentEl) {
+          console.error("[Stream Debug] No content element found in streaming message");
+          return;
+        }
+        
+        // Get current raw text content or initialize it
+        if (!currentStreamingMessage.dataset.rawText) {
+          console.log("[Stream Debug] Initializing rawText in dataset");
+          currentStreamingMessage.dataset.rawText = '';
+        }
+        
+        // Append the new chunk to the raw text
+        currentStreamingMessage.dataset.rawText += message.chunk;
+        console.log("[Stream Debug] Updated rawText, new length:", currentStreamingMessage.dataset.rawText.length);
+        
+        // Special handling for thinking and answer sections
+        const currentRawText = currentStreamingMessage.dataset.rawText;
+        
+        // Check if we have thinking and answer markers
+        const hasThinkingMarker = currentRawText.includes('**Thinking:**');
+        const hasAnswerMarker = currentRawText.includes('**Answer:**');
+        
+        // If we have both markers, we can split the content
+        if (hasThinkingMarker && hasAnswerMarker) {
+          console.log("[Stream Debug] Found both thinking and answer markers");
+          const thinkingStart = currentRawText.indexOf('**Thinking:**');
+          const answerStart = currentRawText.indexOf('**Answer:**');
+          
+          if (thinkingStart >= 0 && answerStart > thinkingStart) {
+            // Extract thinking and answer parts
+            const thinkingPart = currentRawText.substring(thinkingStart + 13, answerStart).trim();
+            const answerPart = currentRawText.substring(answerStart + 11).trim();
+            
+            // Create or update the thinking section
+            let thinkingSection = contentEl.querySelector('.thinking-section');
+            if (!thinkingSection) {
+              thinkingSection = document.createElement('div');
+              thinkingSection.className = 'thinking-section';
+              thinkingSection.innerHTML = '<div class="thinking-header"><span class="thinking-title">Thinking</span><button class="thinking-toggle"><i class="codicon codicon-chevron-down"></i></button></div><div class="thinking-content"></div>';
+              contentEl.innerHTML = '';
+              contentEl.appendChild(thinkingSection);
+            }
+            
+            // Update thinking content
+            const thinkingContent = thinkingSection.querySelector('.thinking-content');
+            if (thinkingContent) {
+              thinkingContent.innerHTML = marked.parse(thinkingPart);
+              // Apply syntax highlighting to thinking content
+              if (typeof Prism !== "undefined") {
+                thinkingContent.querySelectorAll("pre code").forEach((block) => {
+                  Prism.highlightElement(block);
+                });
+              }
+            }
+            
+            // Create or update the answer section
+            let answerSection = contentEl.querySelector('.answer-section');
+            if (!answerSection) {
+              answerSection = document.createElement('div');
+              answerSection.className = 'answer-section';
+              contentEl.appendChild(answerSection);
+            }
+            
+            // Update answer content
+            answerSection.innerHTML = marked.parse(answerPart);
+            // Apply syntax highlighting to answer content
+            if (typeof Prism !== "undefined") {
+              answerSection.querySelectorAll("pre code").forEach((block) => {
+                Prism.highlightElement(block);
+              });
+            }
+          }
+        }
+        // Special handling for code blocks (keep this logic for code blocks without thinking/answer markers)
+        else {
+          // Check if we're in the middle of a code block
+          const codeBlockStarts = (currentRawText.match(/```/g) || []).length;
+          const isInCodeBlock = codeBlockStarts % 2 !== 0;
+          console.log("[Stream Debug] Code block analysis - Starts:", codeBlockStarts, "Is in code block:", isInCodeBlock);
+          
+          try {
+            // If we're in the middle of a code block, we'll just add the raw text for now
+            // and wait until the code block is complete before rendering markdown
+            if (isInCodeBlock && !message.isFirstChunk) {
+              console.log("[Stream Debug] Handling incomplete code block");
+              // For code blocks, use a monospace container and preserve whitespace
+              if (!contentEl.querySelector('.temp-code-block')) {
+                console.log("[Stream Debug] Creating new temporary code block");
+                // Create a temporary code block container if it doesn't exist
+                const tempCodeBlock = document.createElement('div');
+                tempCodeBlock.className = 'temp-code-block';
+                tempCodeBlock.style.fontFamily = 'monospace';
+                tempCodeBlock.style.whiteSpace = 'pre-wrap';
+                tempCodeBlock.style.backgroundColor = 'var(--vscode-textCodeBlock-background)';
+                tempCodeBlock.style.padding = '1em';
+                tempCodeBlock.style.borderRadius = '4px';
+                tempCodeBlock.style.marginTop = '0.7em';
+                tempCodeBlock.style.marginBottom = '0.7em';
+                tempCodeBlock.style.overflow = 'auto';
+                
+                // Find where the last code block starts and only show content after that
+                const lastCodeBlockStart = currentRawText.lastIndexOf('```');
+                console.log("[Stream Debug] Last code block start index:", lastCodeBlockStart);
+                // Extract language if specified
+                let language = '';
+                const textAfterTicks = currentRawText.substring(lastCodeBlockStart + 3);
+                const firstLineEnd = textAfterTicks.indexOf('\n');
+                if (firstLineEnd > 0) {
+                  language = textAfterTicks.substring(0, firstLineEnd).trim();
+                  console.log("[Stream Debug] Detected language for code block:", language);
+                }
+                
+                // Set a data attribute for the language for later highlighting
+                tempCodeBlock.dataset.language = language;
+                
+                // Add the code content so far (excluding the opening ticks and language)
+                const codeContent = firstLineEnd > 0 ? 
+                  textAfterTicks.substring(firstLineEnd + 1) : 
+                  textAfterTicks;
+                console.log("[Stream Debug] Code content length:", codeContent.length);
+                  
+                tempCodeBlock.textContent = codeContent;
+                
+                // Replace any existing content with our parsed version
+                contentEl.innerHTML = '';
+                
+                // Render the content before the code block as markdown
+                if (lastCodeBlockStart > 0) {
+                  const contentBeforeCodeBlock = currentRawText.substring(0, lastCodeBlockStart);
+                  console.log("[Stream Debug] Content before code block, length:", contentBeforeCodeBlock.length);
+                  const beforeElement = document.createElement('div');
+                  beforeElement.innerHTML = marked.parse(contentBeforeCodeBlock);
+                  contentEl.appendChild(beforeElement);
+                }
+                
+                // Add our temp code block
+                contentEl.appendChild(tempCodeBlock);
+                console.log("[Stream Debug] Temp code block added to DOM");
+              } else {
+                console.log("[Stream Debug] Updating existing temporary code block");
+                // Update the existing temp code block with the latest content
+                const tempCodeBlock = contentEl.querySelector('.temp-code-block');
+                
+                // Find where the last code block starts
+                const lastCodeBlockStart = currentRawText.lastIndexOf('```');
+                
+                // Extract language if specified
+                const textAfterTicks = currentRawText.substring(lastCodeBlockStart + 3);
+                const firstLineEnd = textAfterTicks.indexOf('\n');
+                
+                // Get the code content (excluding the opening ticks and language)
+                const codeContent = firstLineEnd > 0 ? 
+                  textAfterTicks.substring(firstLineEnd + 1) : 
+                  textAfterTicks;
+                console.log("[Stream Debug] Updated code content length:", codeContent.length);
+                  
+                tempCodeBlock.textContent = codeContent;
+              }
+            } else {
+              console.log("[Stream Debug] Rendering complete markdown (not in code block or first chunk)");
+              // We can safely render the full content with markdown
+              // If it's the first chunk or if we're not in a code block
+              if (typeof marked !== "undefined") {
+                console.log("[Stream Debug] Using marked to render markdown");
+                contentEl.innerHTML = marked.parse(currentRawText);
+                
+                // Apply syntax highlighting to all complete code blocks
+                if (typeof Prism !== "undefined") {
+                  console.log("[Stream Debug] Applying Prism syntax highlighting");
+                  contentEl.querySelectorAll("pre code").forEach((block) => {
+                    Prism.highlightElement(block);
+                  });
+                }
+              } else {
+                console.log("[Stream Debug] Marked not available, falling back to plain text");
+                // Fallback to plain text if marked is not available
+                contentEl.textContent = currentRawText;
+              }
+            }
+          } catch (e) {
+            console.error("[Stream Debug] Error handling response chunk:", e);
+            // Fallback: just append as plain text
+            contentEl.textContent = currentRawText;
+          }
+        }
+        
+        // Scroll to the bottom as content is added
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        break;
+        
+      case "endResponseStream":
+        console.log("[Stream Debug] Received endResponseStream command");
+        // Find the streaming message element
+        const streamedMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
+        if (!streamedMessage) {
+          console.error("[Stream Debug] No streaming message element found to finalize");
+          return;
+        }
+        
+        // Get the raw text that was accumulated during streaming
+        const rawText = streamedMessage.dataset.rawText || message.fullResponse || '';
+        console.log("[Stream Debug] Final raw text length:", rawText.length);
+        
+        // Get the content element
+        const streamedContentEl = streamedMessage.querySelector('.message-content');
+        
+        // Check if we have thinking and answer markers for final rendering
+        const hasThinkingMarkerFinal = rawText.includes('**Thinking:**');
+        const hasAnswerMarkerFinal = rawText.includes('**Answer:**');
+        
+        // Final render with thinking/answer sections
+        if (hasThinkingMarkerFinal && hasAnswerMarkerFinal) {
+          console.log("[Stream Debug] Final render with thinking/answer sections");
+          const thinkingStartFinal = rawText.indexOf('**Thinking:**');
+          const answerStartFinal = rawText.indexOf('**Answer:**');
+          
+          if (thinkingStartFinal >= 0 && answerStartFinal > thinkingStartFinal) {
+            // Extract thinking and answer parts
+            const thinkingPartFinal = rawText.substring(thinkingStartFinal + 13, answerStartFinal).trim();
+            const answerPartFinal = rawText.substring(answerStartFinal + 11).trim();
+            
+            // Create or update the thinking section
+            let thinkingSectionFinal = streamedContentEl.querySelector('.thinking-section');
+            if (!thinkingSectionFinal) {
+              thinkingSectionFinal = document.createElement('div');
+              thinkingSectionFinal.className = 'thinking-section';
+              thinkingSectionFinal.innerHTML = '<div class="thinking-header"><span class="thinking-title">Thinking</span><button class="thinking-toggle"><i class="codicon codicon-chevron-down"></i></button></div><div class="thinking-content"></div>';
+              streamedContentEl.innerHTML = '';
+              streamedContentEl.appendChild(thinkingSectionFinal);
+              
+              // Remove the local toggle function and click handlers
+              // as we now use the global document click handler
+            }
+            
+            // Update thinking content
+            const thinkingContentFinal = thinkingSectionFinal.querySelector('.thinking-content');
+            if (thinkingContentFinal) {
+              thinkingContentFinal.innerHTML = marked.parse(thinkingPartFinal);
+              // Apply syntax highlighting to thinking content
+              if (typeof Prism !== "undefined") {
+                thinkingContentFinal.querySelectorAll("pre code").forEach((block) => {
+                  Prism.highlightElement(block);
+                });
+              }
+            }
+            
+            // Create or update the answer section
+            let answerSectionFinal = streamedContentEl.querySelector('.answer-section');
+            if (!answerSectionFinal) {
+              answerSectionFinal = document.createElement('div');
+              answerSectionFinal.className = 'answer-section';
+              streamedContentEl.appendChild(answerSectionFinal);
+            }
+            
+            // Update answer content
+            answerSectionFinal.innerHTML = marked.parse(answerPartFinal);
+            // Apply syntax highlighting to answer content
+            if (typeof Prism !== "undefined") {
+              answerSectionFinal.querySelectorAll("pre code").forEach((block) => {
+                Prism.highlightElement(block);
+              });
+            }
+            
+            // Auto-collapse thinking section now that we're done streaming
+            console.log("[Stream Debug] Auto-collapsing thinking section after streaming");
+            thinkingSectionFinal.classList.add('collapsed');
+            const icon = thinkingSectionFinal.querySelector('.thinking-toggle i');
+            if (icon) {
+              icon.className = 'codicon codicon-chevron-right';
+            }
+            
+            // Ensure content styles are also updated when collapsing
+            const content = thinkingSectionFinal.querySelector('.thinking-content');
+            if (content) {
+              // These will be transitioned via CSS but set them explicitly as well 
+              // to ensure consistent state
+              setTimeout(() => {
+                if (thinkingSectionFinal.classList.contains('collapsed')) {
+                  content.style.visibility = 'hidden';
+                  content.style.paddingTop = '0';
+                  content.style.paddingBottom = '0';
+                }
+              }, 200); // Small delay to allow CSS transitions to start
+            }
+          }
+        }
+        // Standard final render if no thinking/answer markers
+        else {
+          try {
+            if (typeof marked !== "undefined") {
+              console.log("[Stream Debug] Final rendering with marked");
+              // Render the full markdown content
+              streamedContentEl.innerHTML = marked.parse(rawText);
+              
+              // Apply final syntax highlighting to all code blocks
+              if (typeof Prism !== "undefined") {
+                console.log("[Stream Debug] Final syntax highlighting with Prism");
+                streamedContentEl.querySelectorAll("pre code").forEach((block) => {
+                  console.log("[Stream Debug] Highlighting code block, language:", block.className);
+                  Prism.highlightElement(block);
+                });
+              }
+            } else {
+              console.log("[Stream Debug] Marked not available for final render, using plain text");
+              // Fallback to plain text if marked is not available
+              streamedContentEl.textContent = rawText;
+            }
+          } catch (e) {
+            console.error("[Stream Debug] Error rendering final markdown:", e);
+            // Use the existing content if there's an error
+          }
+        }
+        
+        // Remove the streaming flag
+        streamedMessage.removeAttribute('data-streaming');
+        console.log("[Stream Debug] Removed streaming flag from message");
+        
+        // Store the full raw text for copy functionality
+        streamedMessage.dataset.rawText = rawText;
+        
+        // Add action buttons to the message
+        const actionContainer = streamedMessage.querySelector('.message-actions');
+        if (actionContainer) {
+          console.log("[Stream Debug] Adding action buttons");
+          // Clear any existing buttons first
+          actionContainer.innerHTML = '';
+          
+          // Add Copy Button
+          const copyButton = document.createElement("button");
+          copyButton.className = "message-action-button copy-button";
+          copyButton.innerHTML = '<i class="codicon codicon-copy"></i>';
+          copyButton.title = "Copy message";
+          copyButton.onclick = () => {
+            // Use the stored raw text for copying
+            navigator.clipboard.writeText(rawText)
+              .then(() => {
+                console.log("[Stream Debug] Message copied to clipboard");
+                // Show a brief visual feedback
+                copyButton.innerHTML = '<i class="codicon codicon-check"></i>';
+                setTimeout(() => {
+                  copyButton.innerHTML = '<i class="codicon codicon-copy"></i>';
+                }, 1000);
+              })
+              .catch(err => {
+                console.error("[Stream Debug] Failed to copy message: ", err);
+              });
+          };
+          actionContainer.appendChild(copyButton);
+          
+          // Add Delete Button
+          const deleteButton = document.createElement("button");
+          deleteButton.className = "message-action-button delete-button";
+          deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
+          deleteButton.title = "Delete message";
+          deleteButton.onclick = () => handleDeleteAIMessage(streamedMessage);
+          actionContainer.appendChild(deleteButton);
+        }
+        
+        // Save chat history
+        saveChatHistory();
+        console.log("[Stream Debug] Chat history saved");
+        
+        // Reset UI state
+        finalizeChatTurn();
+        console.log("[Stream Debug] UI state finalized");
+        break;
+        
+      case "updateResponseMetrics":
+        // Update token counts after streaming is complete
+        let metricTokens = 0;
+        
+        // Add total input tokens for this turn
+        if (typeof message.totalInputTokens === 'number') {
+          metricTokens += message.totalInputTokens;
+          console.log(`Input Tokens (from extension): ${message.totalInputTokens}`);
+        }
+        
+        // Add response tokens
+        if (typeof message.responseTokenCount === 'number') {
+          metricTokens += message.responseTokenCount;
+          console.log(`AI Response Tokens: ${message.responseTokenCount}`);
+        }
+        
+        if (metricTokens > 0) {
+          currentTokenCount += metricTokens;
+          saveTokenCountToState();
+          updateTokenDisplay();
+          console.log(`Total Tokens Added (From Metrics): ${metricTokens}, New Grand Total: ${currentTokenCount}`);
+        }
+        
+        // Check token limit
+        if (currentTokenCount >= TOKEN_LIMIT) {
+          if (chatInput) chatInput.disabled = true;
+          if (sendButton) sendButton.disabled = true;
+          let tokenLimitMsg = document.getElementById("token-limit-message");
+          if (!tokenLimitMsg) {
+            tokenLimitMsg = document.createElement("div");
+            tokenLimitMsg.id = "token-limit-message";
+            tokenLimitMsg.style.color = "var(--vscode-errorForeground)"; 
+            tokenLimitMsg.style.padding = "5px";
+            tokenLimitMsg.textContent = `Token limit (${TOKEN_LIMIT}) reached. Please start a new chat to continue.`;
+            if (chatInput && chatInput.parentNode) {
+              chatInput.parentNode.insertBefore(tokenLimitMsg, chatInput);
+            } else {
+              chatMessages.appendChild(tokenLimitMsg);
+            }
+          }
+          if (tokenCountDisplay) {
+            tokenCountDisplay.style.color = "var(--vscode-errorForeground)";
+          }
+        }
+        break;
+
       case "requestCancelled": // Message from extension confirming cancellation attempt
         console.log("[Webview] Received requestCancelled message.");
         // Now that the extension has confirmed cancellation attempt, fully reset UI
@@ -1888,7 +2254,7 @@
               const found = findNodeByPath(path, child);
               if (found) return found;
           }
-          }
+      }
       return null;
   }
 
@@ -1896,4 +2262,68 @@
   // Initial render
   updateSourceFilesDisplay();
   updateTestFilesDisplay();
+
+  // Add a global document click handler for all thinking section toggles
+  document.addEventListener('click', function(e) {
+    // Check if clicked element is a thinking header or toggle button
+    const thinkingHeader = e.target.closest('.thinking-header');
+    const toggleButton = e.target.closest('.thinking-toggle');
+    
+    if (thinkingHeader || toggleButton) {
+      // Find the thinking section
+      const thinkingSection = (thinkingHeader || toggleButton).closest('.thinking-section');
+      if (thinkingSection) {
+        console.log("[Stream Debug] Thinking section click detected on:", e.target);
+        
+        // If it was the toggle button, prevent propagation to avoid double-toggle
+        if (toggleButton) {
+          e.stopPropagation();
+        }
+        
+        // Toggle the collapsed state
+        const isCollapsed = thinkingSection.classList.contains('collapsed');
+        console.log("[Stream Debug] Current state before toggle:", isCollapsed ? "collapsed" : "expanded");
+        
+        if (isCollapsed) {
+          // Expand
+          thinkingSection.classList.remove('collapsed');
+          
+          // Update icon
+          const icon = thinkingSection.querySelector('.thinking-toggle i');
+          if (icon) {
+            icon.className = 'codicon codicon-chevron-down';
+          }
+          
+          // Make content visible immediately
+          const content = thinkingSection.querySelector('.thinking-content');
+          if (content) {
+            content.style.display = 'block';
+            content.style.visibility = 'visible';
+            content.style.maxHeight = '500px';
+            content.style.padding = '10px 15px';
+            console.log("[Stream Debug] Expanded thinking section, content display:", content.style.display);
+          }
+        } else {
+          // Collapse
+          thinkingSection.classList.add('collapsed');
+          
+          // Update icon
+          const icon = thinkingSection.querySelector('.thinking-toggle i');
+          if (icon) {
+            icon.className = 'codicon codicon-chevron-right';
+          }
+          
+          // Hide content
+          const content = thinkingSection.querySelector('.thinking-content');
+          if (content) {
+            content.style.display = 'none';
+            content.style.visibility = 'hidden';
+            content.style.maxHeight = '0';
+            content.style.padding = '0 15px';
+            console.log("[Stream Debug] Collapsed thinking section, content display:", content.style.display);
+          }
+        }
+      }
+    }
+  });
 })();

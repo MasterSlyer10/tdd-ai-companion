@@ -121,16 +121,21 @@ export function activate(context: vscode.ExtensionContext) {
             console.log("[suggestTestCaseCommand] Value of 'prompt' variable before calling callGenerativeApi:", prompt);
             console.log("[suggestTestCaseCommand] Conversation history before calling callGenerativeApi:", JSON.stringify(conversationHistory, null, 2));
 
-            // Call the Gemini API (callGenerativeApi now returns an object)
+            // Call the Gemini API with streaming (callGenerativeApi now returns an object)
             const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal);
-            const responseTokenCount = Math.ceil(responseText.length / 4); // Estimate response token count
             
-            // Estimate token count for the entire input payload sent to LLM
-            // The llmInputPayload is the `messages` array.
+            // The responses are now streamed directly to the webview, but we still need to:
+            // 1. Save the complete response to the conversation history
+            // 2. Tell the sidebar provider to finalize/update any state
+            
+            // We don't need to call addResponse here as the chunks have been sent directly,
+            // but we do need to inform the sidebar about response metrics
+            const responseTokenCount = Math.ceil(responseText.length / 4);
             const totalInputTokens = Math.ceil(JSON.stringify(llmInputPayload).length / 4);
-
-            // Display the response
-            sidebarProvider.addResponse(responseText, responseTokenCount, totalInputTokens);
+            
+            // Update the conversation history with the complete response
+            sidebarProvider.updateLastResponse(responseText, responseTokenCount, totalInputTokens);
+            
           } catch (error: any) {
             if (error.name === 'AbortError') {
               console.log("[suggestTestCaseCommand] Fetch request aborted successfully.");
@@ -548,14 +553,23 @@ async function callGenerativeApi(
     
     console.log("Full 'contents' array being sent to Gemini API:", JSON.stringify(contents, null, 2));
 
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiApiKey}`;
+    // Add system instruction to show thinking
+    const requestBody = {
+      contents,
+      systemInstruction: {
+        parts: [{ text: "Structure your response in two sections:\n\n1. Begin with '**Thinking:**' followed by your detailed analysis, reasoning process, and considerations. This is where you work through the problem.\n\n2. Follow with '**Answer:**' and format your answer with clear headings, bullet points, and code blocks as appropriate. Make the answer section well-structured and easy to read. Ensure code examples are properly formatted in markdown code blocks with the appropriate language specified.\n\nDo not include any meta-commentary about the format itself. Just use the headings '**Thinking:**' and '**Answer:**' directly followed by your content for each section." }]
+      }
+    };
+
+    // Use the streaming endpoint instead of generateContent
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:streamGenerateContent?alt=sse&key=${geminiApiKey}`;
 
     const response = await fetch(geminiApiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ contents }), // Send the 'contents' array
+      body: JSON.stringify(requestBody), // Send the contents array and system instruction
       signal: abortSignal,
     });
 
@@ -567,16 +581,159 @@ async function callGenerativeApi(
       );
     }
 
-    const data = (await response.json()) as GeminiApiResponse;
-
-    if (!data.candidates || data.candidates.length === 0 || !data.candidates[0].content || !data.candidates[0].content.parts || data.candidates[0].content.parts.length === 0) {
-      console.error("Invalid response structure from Gemini API:", data);
-      throw new Error("Invalid or empty response from Gemini API.");
+    // Process the SSE stream
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Failed to get stream reader from response");
     }
-    
-    const responseText = data.candidates[0].content.parts[0].text;
-    return { responseText, llmInputPayload: contents }; // Return the 'contents' sent as llmInputPayload
 
+    let responseText = "";
+    let firstChunk = true;
+    let decoder = new TextDecoder();
+    let buffer = "";
+    
+    // Add initial message to UI before starting the stream
+    if (sidebarProvider && sidebarProvider._view) {
+      sidebarProvider._view.webview.postMessage({
+        command: "startResponseStream"
+      });
+    }
+
+    try {
+      // Read chunks from the stream
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log("[SSE Debug] Stream reading complete");
+          break;
+        }
+
+        // Decode the chunk and add it to our buffer
+        const newText = decoder.decode(value, { stream: true });
+        buffer += newText;
+        console.log("[SSE Debug] Raw chunk received:", newText);
+        
+        // Process complete SSE messages from the buffer
+        let processedBuffer = processSSEBuffer(buffer);
+        console.log("[SSE Debug] Processed buffer, found", processedBuffer.messages.length, "complete messages");
+        console.log("[SSE Debug] Remaining buffer:", processedBuffer.remaining);
+        buffer = processedBuffer.remaining;
+        
+        // For each complete message, handle it
+        for (const data of processedBuffer.messages) {
+          console.log("[SSE Debug] Processing message:", data);
+          if (data === '[DONE]') {
+            console.log("[SSE Debug] Received [DONE] message");
+            continue; // Skip [DONE] messages
+          }
+          
+          try {
+            const parsedData = JSON.parse(data);
+            console.log("[SSE Debug] Successfully parsed JSON data");
+            
+            if (parsedData.candidates && 
+                parsedData.candidates[0] && 
+                parsedData.candidates[0].content && 
+                parsedData.candidates[0].content.parts && 
+                parsedData.candidates[0].content.parts[0] && 
+                parsedData.candidates[0].content.parts[0].text) {
+              
+              const chunkContent = parsedData.candidates[0].content.parts[0].text;
+              console.log("[SSE Debug] Extracted chunk content:", chunkContent);
+              
+              // Append to the full response
+              responseText += chunkContent;
+              
+              // Send the chunk to the webview
+              if (sidebarProvider && sidebarProvider._view) {
+                console.log("[SSE Debug] Sending chunk to webview, isFirstChunk:", firstChunk);
+                sidebarProvider._view.webview.postMessage({
+                  command: "appendResponseChunk",
+                  chunk: chunkContent,
+                  isFirstChunk: firstChunk
+                });
+                firstChunk = false;
+              }
+            } else {
+              console.log("[SSE Debug] Message doesn't contain expected content structure:", parsedData);
+            }
+          } catch (e) {
+            console.error("[SSE Debug] Error parsing SSE message JSON:", e, data);
+          }
+        }
+      }
+      
+      // Final decoding to catch any remaining text
+      buffer += decoder.decode();
+      console.log("[SSE Debug] Final buffer after stream completion:", buffer);
+      let processedBuffer = processSSEBuffer(buffer);
+      console.log("[SSE Debug] Final processing found", processedBuffer.messages.length, "messages");
+      
+      // Process any remaining complete messages
+      for (const data of processedBuffer.messages) {
+        if (data === '[DONE]') {
+          console.log("[SSE Debug] Skipping final [DONE] message");
+          continue;
+        }
+        
+        try {
+          const parsedData = JSON.parse(data);
+          console.log("[SSE Debug] Parsed final message JSON");
+          
+          if (parsedData.candidates && 
+              parsedData.candidates[0] && 
+              parsedData.candidates[0].content && 
+              parsedData.candidates[0].content.parts && 
+              parsedData.candidates[0].content.parts[0] && 
+              parsedData.candidates[0].content.parts[0].text) {
+            
+            const chunkContent = parsedData.candidates[0].content.parts[0].text;
+            console.log("[SSE Debug] Final chunk content:", chunkContent);
+            
+            // Append to the full response
+            responseText += chunkContent;
+            
+            // Send the chunk to the webview
+            if (sidebarProvider && sidebarProvider._view) {
+              console.log("[SSE Debug] Sending final chunk to webview");
+              sidebarProvider._view.webview.postMessage({
+                command: "appendResponseChunk",
+                chunk: chunkContent,
+                isFirstChunk: firstChunk
+              });
+              firstChunk = false;
+            }
+          } else {
+            console.log("[SSE Debug] Final message doesn't contain expected structure:", parsedData);
+          }
+        } catch (e) {
+          console.error("[SSE Debug] Error parsing final SSE message JSON:", e, data);
+        }
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log("Stream reading aborted");
+        throw error; // Re-throw AbortError to be caught in the outer catch block
+      }
+      console.error("Error reading stream:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Error reading stream: ${errorMessage}`);
+    } finally {
+      // Send a message to indicate the stream is complete, regardless of how we exited the loop
+      if (sidebarProvider && sidebarProvider._view) {
+        sidebarProvider._view.webview.postMessage({
+          command: "endResponseStream",
+          fullResponse: responseText
+        });
+      }
+    }
+
+    // Estimate response token count
+    const responseTokenCount = Math.ceil(responseText.length / 4);
+    // Estimate token count for the entire input payload
+    const totalInputTokens = Math.ceil(JSON.stringify(contents).length / 4);
+
+    return { responseText, llmInputPayload: contents };
   } catch (error) {
     console.error("Error calling Gemini API:", error);
     // Send a message to the webview indicating generation failure
@@ -589,6 +746,55 @@ async function callGenerativeApi(
       }`
     );
   }
+}
+
+// Helper function to process SSE buffer into complete messages
+function processSSEBuffer(buffer: string): { messages: string[], remaining: string } {
+  console.log("[SSE Debug] Processing buffer:", buffer);
+  const result: string[] = [];
+  const lines = buffer.split('\n');
+  console.log("[SSE Debug] Split into", lines.length, "lines");
+  let remaining = '';
+  let currentMessage = '';
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    console.log(`[SSE Debug] Processing line ${i}: "${line}"`);
+    
+    // Empty line marks the end of a message
+    if (line === '') {
+      if (currentMessage) {
+        console.log(`[SSE Debug] End of message found, adding to results: "${currentMessage}"`);
+        result.push(currentMessage);
+        currentMessage = '';
+      }
+      continue;
+    }
+    
+    // Lines starting with "data:" contain the message data
+    if (line.startsWith('data: ')) {
+      console.log(`[SSE Debug] Found data line: "${line}"`);
+      currentMessage = line.substring(6); // Remove "data: " prefix
+    }
+    // For the last line, if it's incomplete, add it to remaining
+    else if (i === lines.length - 1) {
+      console.log(`[SSE Debug] Last line is incomplete, adding to remaining: "${line}"`);
+      remaining = line;
+    }
+    // Any other lines are ignored for now
+    else {
+      console.log(`[SSE Debug] Ignoring line: "${line}"`);
+    }
+  }
+  
+  // If we have a complete message at the end with no trailing newline
+  if (currentMessage) {
+    console.log(`[SSE Debug] Found complete message at end without newline: "${currentMessage}"`);
+    result.push(currentMessage);
+  }
+  
+  console.log(`[SSE Debug] Processed buffer. Found ${result.length} messages and remaining: "${remaining}"`);
+  return { messages: result, remaining };
 }
 
 // Remove callCustomLLM as it's no longer configured

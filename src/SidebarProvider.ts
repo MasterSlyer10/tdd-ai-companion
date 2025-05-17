@@ -338,6 +338,34 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  // For use with streaming responses
+  public updateLastResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
+    // Check if the request was cancelled internally
+    if (this._isCurrentRequestCancelled) {
+        console.log("Request was cancelled internally, not updating response.");
+        this._isCurrentRequestCancelled = false; // Reset flag for the next request
+        return; // Do not update response if cancelled
+    }
+
+    // If the response is empty, provide a default message
+    if (!response) {
+      response = "AI failed to generate a response.";
+    }
+
+    // Add to conversation history
+    this._chatHistory.push({ role: "assistant", content: response });
+    this._context.workspaceState.update("chatHistory", this._chatHistory);
+
+    // Send token metrics to UI - the response content itself was already streamed
+    if (this._view) {
+      this._view.webview.postMessage({
+        command: "updateResponseMetrics",
+        responseTokenCount,
+        totalInputTokens
+      });
+    }
+  }
+
   public getSourceFiles(): vscode.Uri[] {
     return this._sourceFiles;
   }

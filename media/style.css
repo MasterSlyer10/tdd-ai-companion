@@ -1170,3 +1170,163 @@ body {
   font-style: italic;
   margin-top: 8px;
 }
+
+/* Streaming messages specific styling */
+.message.ai-message[data-streaming="true"] .message-content {
+  /* Add a subtle animation effect to indicate content is being received */
+  border-left: 3px solid var(--vscode-activityBarBadge-background);
+}
+
+/* Style for temporary code blocks while streaming */
+.temp-code-block {
+  font-family: var(--vscode-editor-font-family, monospace);
+  background-color: var(--vscode-textCodeBlock-background);
+  padding: 1em;
+  border-radius: 4px;
+  overflow: auto;
+  margin: 0.7em 0;
+  white-space: pre-wrap;
+  position: relative;
+}
+
+/* Add a subtle streaming indicator for code blocks in progress */
+.temp-code-block::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  background-color: var(--vscode-activityBarBadge-background);
+  animation: cursor-blink 1s infinite;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+
+@keyframes cursor-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.message-content table {
+  border-collapse: collapse;
+  margin: 0.7em 0;
+  width: 100%;
+}
+
+/* Streaming indicator for active messages */
+.message.ai-message[data-streaming="true"]::after {
+  content: "●";
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  font-size: 8px;
+  color: var(--vscode-activityBarBadge-background);
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+.message.ai-message[data-streaming="true"] {
+  border-left: 3px solid var(--vscode-activityBarBadge-background);
+}
+
+/* Thinking section styles */
+.thinking-section {
+  margin: 10px 0;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 5px;
+  overflow: hidden;
+  background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.05));
+}
+
+.thinking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--vscode-sideBarSectionHeader-background, rgba(128, 128, 128, 0.1));
+  cursor: pointer;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  user-select: none; /* Prevent text selection when clicking */
+  z-index: 2; /* Ensure the header stays above content */
+  position: relative; /* For z-index to work */
+}
+
+.thinking-title {
+  font-weight: 600;
+  font-size: 0.9em;
+  color: var(--vscode-sideBarSectionHeader-foreground);
+}
+
+.thinking-toggle {
+  background: transparent;
+  border: none;
+  color: var(--vscode-sideBarSectionHeader-foreground);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.thinking-content {
+  padding: 10px 15px;
+  max-height: 500px; /* Set a specific max-height for the expanded state */
+  overflow: auto; /* Change to auto to allow scrolling for large content */
+  transition: max-height 0.3s ease-out, padding 0.2s ease-out, visibility 0s; /* Remove delay on visibility transition */
+  visibility: visible;
+  opacity: 1;
+  transform-origin: top;
+  transform: scaleY(1);
+}
+
+/* Collapsed state */
+.thinking-section.collapsed .thinking-content {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  visibility: hidden;
+  opacity: 0;
+  transform: scaleY(0);
+  transition: 
+    max-height 0.2s ease-out, 
+    padding 0.1s ease-out, 
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out,
+    visibility 0s 0.2s; /* Delay hiding visibility until after other transitions */
+}
+
+/* Explicitly set the border display for collapsed state */
+.thinking-section.collapsed .thinking-header {
+  border-bottom: none;
+}
+
+/* Answer section styles */
+.answer-section {
+  margin-top: 10px;
+  padding: 0;
+}
+
+/* Pulsing animation for thinking section while streaming */
+@keyframes thinking-pulse {
+  0% { background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.05)); }
+  50% { background-color: var(--vscode-editor-selectionHighlightBackground, rgba(128, 128, 128, 0.1)); }
+  100% { background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.05)); }
+}
+
+.message.ai-message[data-streaming="true"] .thinking-section {
+  animation: thinking-pulse 2s infinite ease-in-out;
+}
+
+@keyframes cursor-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
