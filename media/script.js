@@ -1205,6 +1205,7 @@
 
     const isCurrentlyGenerating = sendButton.dataset.state === "stop" || sendButton.dataset.state === "stopping";
 
+    // Add Edit and Delete buttons for user messages
     if (isUser) {
       const editButton = document.createElement("button");
       editButton.className = "message-action-button edit-button";
@@ -1215,17 +1216,17 @@
       editButton.onclick = () => handleEditUserMessage(messageElement, contentElement, messageElement.dataset.rawText);
       actionsElement.appendChild(editButton);
 
-      const deleteUserButton = document.createElement("button");
-      deleteUserButton.className = "message-action-button delete-button"; // This is a "delete-button"
-      deleteUserButton.innerHTML = '<i class="codicon codicon-trash"></i>';
-      deleteUserButton.title = "Delete message and subsequent responses";
-      deleteUserButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
-      deleteUserButton.onclick = () => handleDeleteUserMessage(messageElement);
-      actionsElement.appendChild(deleteUserButton);
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "message-action-button delete-button";
+      deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
+      deleteButton.title = "Delete message"; // Changed tooltip
+      deleteButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
+      deleteButton.onclick = () => handleDeleteUserMessage(messageElement); // Call new handler
+      actionsElement.appendChild(deleteButton);
 
     } else { // AI message
       const deleteButton = document.createElement("button");
-      deleteButton.className = "message-action-button delete-button"; // This is also a "delete-button"
+      deleteButton.className = "message-action-button delete-button";
       deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
       deleteButton.title = "Delete message";
       deleteButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
@@ -1399,6 +1400,20 @@
   }
 
   // START - New functions for message editing and deletion
+
+  // Function to handle deletion of a user message
+  function handleDeleteUserMessage(userMessageElement) {
+      if (!userMessageElement || userMessageElement.parentNode !== chatMessages) {
+          return;
+      }
+
+      // Remove the user message from the DOM
+      chatMessages.removeChild(userMessageElement);
+
+      // Save the updated chat history
+      saveChatHistory();
+  }
+
   function handleDeleteAIMessage(aiMessageElement) {
     if (!aiMessageElement || aiMessageElement.parentNode !== chatMessages) {
         return;
@@ -1497,7 +1512,6 @@
     actionsElement.appendChild(cancelButton);
 
     // Ensure actions container is visible and uses flex display in edit mode
-    actionsElement.style.opacity = 1;
     actionsElement.style.display = 'flex';
 
     // Add event listeners for the new buttons
