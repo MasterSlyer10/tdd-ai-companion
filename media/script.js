@@ -13,7 +13,9 @@
   let messageIdCounter = 0; // Counter for unique message IDs
   let currentTokenCount = 0; // Token counter
   const TOKEN_LIMIT = 100000; // Token limit
-  let isRequestCancelled = false; // Flag to track if the current request is cancelled
+  let isRequestCancelled = false; // DEPRECATED in favor of isCancellationPending for clarity
+  let isCancellationPending = false; // True if user clicked stop and we're waiting for extension ack
+  let currentStreamingRequestId = null; // Store the ID of the request currently being streamed
 
   // DOM Elements
   let tokenCountDisplay = null; // To display token count
@@ -65,6 +67,25 @@
       sendButton.title = "Send Request";
       if (chatInput) chatInput.disabled = false;
     }
+    // Update visibility of message actions based on the new state
+    updateMessageActionsVisibility(state === "stop" || state === "stopping");
+  }
+
+  // New function to control visibility of edit/delete/rerun buttons
+  function updateMessageActionsVisibility(hide) {
+    if (!chatMessages) return;
+
+    const messages = chatMessages.querySelectorAll('.message');
+    messages.forEach(messageElement => {
+      // Target specific buttons: edit, delete, rerun, and also save/cancel in edit mode
+      const buttonsToToggle = messageElement.querySelectorAll(
+        '.edit-button, .delete-button, .rerun-button, .save-resend-button, .cancel-edit-button'
+      );
+      
+      buttonsToToggle.forEach(button => {
+        button.style.display = hide ? 'none' : 'flex'; // 'flex' is the default display
+      });
+    });
   }
 
   function init() {
@@ -89,8 +110,10 @@
     // Load checked items from storage
     loadCheckedItemsFromState();
 
-    // Reset cancellation flag on init
+    // Reset cancellation flags and streaming request ID on init
     isRequestCancelled = false;
+    isCancellationPending = false; // Ensure this is also reset on init
+    currentStreamingRequestId = null; // Reset streaming request ID
 
     // Load token count from state
     loadTokenCountFromState();
@@ -911,19 +934,27 @@
     if (!sendButton) return;
 
     if (sendButton.dataset.state === "stop") {
-      console.log("Stop button clicked");
+      console.log("Stop button clicked - setting isCancellationPending = true");
+      isCancellationPending = true; // User initiated a cancel, wait for extension ack.
+      
+      const streamingMsg = document.querySelector('.message.ai-message[data-streaming="true"]');
+      if (streamingMsg) {
+          streamingMsg.dataset.clientCancelled = "true"; // Tag this specific DOM stream
+          console.log("[Cancellation] Marked streaming message with clientCancelled=true:", streamingMsg.id);
+      }
+      
+      setSendButtonState("stopping"); // UI to "stopping", disables input
       vscode.postMessage({ command: "cancelRequest" });
-      setSendButtonState("stopping"); // Change to Stopping button and keep loading indicator
-      isRequestCancelled = true; // Set cancellation flag immediately on client side
-      // Do NOT immediately remove loading indicator or reset to "send" state here.
-      // Wait for the 'requestCancelled' message from the extension.
     } else {
       console.log("Send button clicked (from handleSendOrStopClick)");
-      sendChatMessage();
+      sendChatMessage(); // This will only run if state was "send"
     }
   }
 
   function sendChatMessage() {
+    // Reset the current streaming request ID when a new request starts
+    currentStreamingRequestId = null;
+
     // Explicitly get the element and its value again, right before sending.
     const currentChatInputElement = document.getElementById("chat-input");
     const message = currentChatInputElement ? currentChatInputElement.value.trim() : "";
@@ -960,8 +991,9 @@
     // This console.log will appear in the Webview Developer Tools console
     console.log("Webview: Sending message to extension:", message, `Current Total Tokens (before this turn): ${currentTokenCount}`);
 
-    setSendButtonState("stop"); // Change to Stop button
-    isRequestCancelled = false; // Reset cancellation flag for new request
+    // isCancellationPending is NOT reset here. It's reset by requestCancelled message from extension.
+    // isRequestCancelled (old flag) is not used.
+    setSendButtonState("stop"); // UI to "generating", input disabled.
 
     // Add message to UI
     addMessageToChat(message, true);
@@ -987,6 +1019,9 @@
 
   // Simple Suggest Button (Lightbulb icon)
   function sendPredefinedSuggestion() {
+    // Reset the current streaming request ID when a new request starts
+    currentStreamingRequestId = null;
+
     // Send a predefined message
     const predefinedMessage =
       "Suggest a new test case for my current implementation";
@@ -995,9 +1030,8 @@
     if (chatInput) {
       chatInput.value = predefinedMessage;
     }
-
-    setSendButtonState("stop"); // Change to Stop button
-    isRequestCancelled = false; // Reset cancellation flag for new request
+    // isCancellationPending is NOT reset here.
+    setSendButtonState("stop"); // UI to "generating", input disabled.
 
     // Add message to UI
     addMessageToChat(predefinedMessage, true);
@@ -1025,6 +1059,9 @@
 
   // New function for the "Suggest Test Case" button
   function sendSuggestTestCaseMessage() {
+     // Reset the current streaming request ID when a new request starts
+    currentStreamingRequestId = null;
+
      // Send a predefined message for suggesting a test case
     const predefinedMessage =
       "Suggest a new test case for my current implementation"; // Same message as the lightbulb for now
@@ -1033,9 +1070,8 @@
     if (chatInput) {
       chatInput.value = predefinedMessage;
     }
-
-    setSendButtonState("stop"); // Change to Stop button
-    isRequestCancelled = false; // Reset cancellation flag for new request
+    // isCancellationPending is NOT reset here.
+    setSendButtonState("stop"); // UI to "generating", input disabled.
 
     // Add message to UI
     addMessageToChat(predefinedMessage, true);
@@ -1135,6 +1171,7 @@
     // Add Copy Button
     const copyButton = document.createElement("button");
     copyButton.className = "message-action-button copy-button";
+    // Copy button is always visible, so its display is not managed by isGenerating
     copyButton.innerHTML = '<i class="codicon codicon-copy"></i>';
     copyButton.title = "Copy message";
     copyButton.onclick = () => {
@@ -1149,28 +1186,32 @@
     };
     actionsElement.appendChild(copyButton);
 
+    const isCurrentlyGenerating = sendButton.dataset.state === "stop" || sendButton.dataset.state === "stopping";
 
     if (isUser) {
       const editButton = document.createElement("button");
       editButton.className = "message-action-button edit-button";
       editButton.innerHTML = '<i class="codicon codicon-edit"></i>';
       editButton.title = "Edit message";
+      editButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
       // Use messageElement.dataset.rawText to ensure the *current* text is edited
       editButton.onclick = () => handleEditUserMessage(messageElement, contentElement, messageElement.dataset.rawText);
       actionsElement.appendChild(editButton);
 
       const deleteUserButton = document.createElement("button");
-      deleteUserButton.className = "message-action-button delete-button";
+      deleteUserButton.className = "message-action-button delete-button"; // This is a "delete-button"
       deleteUserButton.innerHTML = '<i class="codicon codicon-trash"></i>';
       deleteUserButton.title = "Delete message and subsequent responses";
+      deleteUserButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
       deleteUserButton.onclick = () => handleDeleteUserMessage(messageElement);
       actionsElement.appendChild(deleteUserButton);
 
     } else { // AI message
       const deleteButton = document.createElement("button");
-      deleteButton.className = "message-action-button delete-button";
+      deleteButton.className = "message-action-button delete-button"; // This is also a "delete-button"
       deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
       deleteButton.title = "Delete message";
+      deleteButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
       deleteButton.onclick = () => handleDeleteAIMessage(messageElement);
       actionsElement.appendChild(deleteButton);
     }
@@ -1374,10 +1415,12 @@
 
     const actionsElement = userMessageElement.querySelector('.message-actions');
     if (actionsElement && !actionsElement.querySelector('.rerun-button')) {
+        const isCurrentlyGenerating = sendButton.dataset.state === "stop" || sendButton.dataset.state === "stopping";
         const rerunButton = document.createElement("button");
         rerunButton.className = "message-action-button rerun-button";
         rerunButton.innerHTML = '<i class="codicon codicon-refresh"></i>';
         rerunButton.title = "Re-run prompt";
+        rerunButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
 
         rerunButton.onclick = () => {
             // 1. Remove all messages *after* this userMessageElement
@@ -1534,10 +1577,13 @@
         message: newContent,
       });
 
+      // 4a. Set button state to "stop" to indicate generation and hide actions
+      setSendButtonState("stop"); 
+
       // 5. Refresh file tree (as per original "reload" functionality)
       requestWorkspaceFiles();
 
-      // 6. Restore original action buttons
+      // 6. Restore original action buttons (they will be hidden by setSendButtonState via updateMessageActionsVisibility)
       restoreOriginalActions(messageElement);
     };
 
@@ -1559,18 +1605,24 @@
   function restoreOriginalActions(messageElement) {
       const actionsElement = messageElement.querySelector('.message-actions');
       if (actionsElement) {
-          // Remove edit action buttons
+          // Remove edit action buttons (Save & Resend, Cancel)
           actionsElement.querySelectorAll('.edit-action-button').forEach(btn => {
               if (btn.parentNode) {
                   btn.parentNode.removeChild(btn);
               }
           });
-          // Show original action buttons
+
+          const isCurrentlyGenerating = sendButton.dataset.state === "stop" || sendButton.dataset.state === "stopping";
+
+          // Restore original action buttons (Copy, Edit, Delete)
           actionsElement.querySelectorAll('.message-action-button').forEach(btn => {
-              btn.style.display = 'flex'; // Or whatever the default display was
+              if (btn.classList.contains('edit-button') || btn.classList.contains('delete-button')) {
+                  btn.style.display = isCurrentlyGenerating ? 'none' : 'flex';
+              } else if (btn.classList.contains('copy-button')) {
+                  btn.style.display = 'flex'; // Copy button is always visible
+              }
+              // Rerun button's visibility is managed by updateMessageActionsVisibility if it exists
           });
-          // Restore opacity based on hover (or keep visible if needed)
-          // actionsElement.style.opacity = 0; // Will be shown on hover by CSS
       }
       // Remove 'editing' class from the message element
       messageElement.classList.remove('editing');
@@ -1606,9 +1658,12 @@
         break;
 
       case "addResponse":
-        // If the request was cancelled on the frontend, ignore this response
-        if (isRequestCancelled) {
-            console.log("Received response after cancellation, ignoring.");
+        // If a cancellation is pending acknowledgement, ignore this non-streaming response.
+        if (isCancellationPending) {
+            console.log("addResponse: isCancellationPending is true, ignoring non-streaming response.");
+            // Ensure loading indicators are removed if any were present for this aborted attempt
+            const stillLoadingIndicators = chatMessages.querySelectorAll(".loading-indicator");
+            stillLoadingIndicators.forEach((indicator) => indicator.remove());
             return;
         }
 
@@ -1666,65 +1721,86 @@
         break;
 
       case "startResponseStream":
-        console.log("[Stream Debug] Received startResponseStream command");
+        console.log("[Stream Debug] Received startResponseStream command (Request ID:", message.requestId, ")");
+        // Store the request ID for this stream
+        currentStreamingRequestId = message.requestId;
+
         // Remove any loading indicators before we start streaming
         document.querySelectorAll(".loading-indicator").forEach(indicator => indicator.remove());
-        
+
         // Create a new message element for the streaming response
         const streamingMessageElement = document.createElement("div");
         streamingMessageElement.id = `msg-${messageIdCounter++}`;
         streamingMessageElement.className = "message ai-message";
         streamingMessageElement.dataset.streaming = "true"; // Mark as streaming
-        console.log("[Stream Debug] Created streaming message element with ID:", streamingMessageElement.id);
-        
+        streamingMessageElement.dataset.requestId = message.requestId; // Store the request ID on the element
+        console.log("[Stream Debug] Created streaming message element with ID:", streamingMessageElement.id, "and Request ID:", message.requestId);
+
         // Add avatar
         const avatarElement = document.createElement("div");
         avatarElement.className = "message-avatar";
         avatarElement.innerHTML = '<i class="codicon codicon-beaker"></i>';
         streamingMessageElement.appendChild(avatarElement);
-        
+
         // Add content container
         const contentElement = document.createElement("div");
         contentElement.className = "message-content";
-        
+
         // Create wrapper for content and actions
         const contentWrapper = document.createElement("div");
         contentWrapper.className = "message-content-wrapper";
         contentWrapper.appendChild(contentElement);
-        
+
         // Add the actions container (initially empty)
         const actionsElement = document.createElement("div");
         actionsElement.className = "message-actions";
         contentWrapper.appendChild(actionsElement);
-        
+
         streamingMessageElement.appendChild(contentWrapper);
         chatMessages.appendChild(streamingMessageElement);
         console.log("[Stream Debug] Streaming message element added to DOM");
-        
+
         // Scroll to the bottom to show the new message
         chatMessages.scrollTop = chatMessages.scrollHeight;
         break;
         
       case "appendResponseChunk":
-        console.log("[Stream Debug] Received appendResponseChunk command. Chunk:", message.chunk, "Is first chunk:", message.isFirstChunk);
-        
-        // Check if the request has been cancelled, if so ignore this chunk
-        if (isRequestCancelled) {
-          console.log("[Stream Debug] Request was cancelled, ignoring this chunk");
-          // Don't just return - actively remove any partially streamed message
-          const partialMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
-          if (partialMessage) {
-            console.log("[Stream Debug] Removing partial message due to cancellation");
-            partialMessage.remove();
-          }
-          return;
+        console.log("[Stream Debug] Received appendResponseChunk command. Chunk:", message.chunk, "Is first chunk:", message.isFirstChunk, "Request ID:", message.requestId);
+
+        // Check if this chunk belongs to the currently active stream
+        if (message.requestId !== currentStreamingRequestId) {
+            console.log("[Stream Debug] appendResponseChunk: Request ID mismatch. Ignoring chunk.");
+            return; // Ignore chunks from old or unexpected requests
         }
         
-        // Find the streaming message element
-        const currentStreamingMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
+        // Primary guard: if a cancellation is pending extension acknowledgement, ignore ALL incoming stream chunks.
+        if (isCancellationPending) {
+            const msgBeingUpdated = document.querySelector('.message.ai-message[data-streaming="true"]');
+            if (msgBeingUpdated) {
+                // This chunk might be for the stream the user tried to cancel, or a new one that started too soon.
+                console.log("[Stream Debug] appendResponseChunk: isCancellationPending is true. Ignoring chunk. Removing streaming msg:", msgBeingUpdated.id);
+                if (msgBeingUpdated.parentNode) msgBeingUpdated.remove();
+            } else {
+                console.log("[Stream Debug] appendResponseChunk: isCancellationPending is true. Ignoring chunk. No streaming message found.");
+            }
+            return;
+        }
+        
+        // If no cancellation is pending, proceed to find and update the current streaming message.
+        // Use the request ID to find the specific message element
+        const currentStreamingMessage = document.querySelector(`.message.ai-message[data-streaming="true"][data-request-id="${message.requestId}"]`);
+
         if (!currentStreamingMessage) {
-          console.error("[Stream Debug] No streaming message element found to append chunk");
-          return;
+          console.log("[Stream Debug] appendResponseChunk: No streaming message element found for Request ID", message.requestId, "(and no cancellation pending). Ignoring chunk.");
+          return; 
+        }
+
+        // If this specific stream was client-cancelled (e.g. user clicked stop, but isCancellationPending was somehow reset before this chunk arrived for it)
+        // This is a fallback, primary guard is isCancellationPending.
+        if (currentStreamingMessage.dataset.clientCancelled === "true") {
+          console.log("[Stream Debug] appendResponseChunk: Ignoring chunk for a stream element marked clientCancelled (fallback):", currentStreamingMessage.id);
+          if (currentStreamingMessage.parentNode) currentStreamingMessage.remove();
+          return; 
         }
         
         const contentEl = currentStreamingMessage.querySelector('.message-content');
@@ -1919,24 +1995,36 @@
         break;
         
       case "endResponseStream":
-        console.log("[Stream Debug] Received endResponseStream command");
-        
-        // If the request was cancelled, don't process the end response and ensure any partial message is removed
-        if (isRequestCancelled) {
-          console.log("[Stream Debug] Request was cancelled, ignoring endResponseStream");
-          // Remove any streaming message that may have been partially created
-          const partialStreamedMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
-          if (partialStreamedMessage) {
-            console.log("[Stream Debug] Removing partial streamed message during endResponseStream");
-            partialStreamedMessage.remove();
-          }
-          return;
+        console.log("[Stream Debug] Received endResponseStream command (Request ID:", message.requestId, ")");
+
+        // Check if this end signal belongs to the currently active stream
+        if (message.requestId !== currentStreamingRequestId) {
+            console.log("[Stream Debug] endResponseStream: Request ID mismatch. Ignoring end signal.");
+            return; // Ignore end signals from old or unexpected requests
         }
-        
-        // Find the streaming message element
+
+        // Primary guard: if a cancellation is pending extension acknowledgement, ignore this end signal.
+        if (isCancellationPending) {
+            const msgBeingEnded = document.querySelector('.message.ai-message[data-streaming="true"]');
+            if (msgBeingEnded) {
+                console.log("[Stream Debug] endResponseStream: isCancellationPending is true. Ignoring end signal. Removing streaming msg:", msgBeingEnded.id);
+                if (msgBeingEnded.parentNode) msgBeingEnded.remove();
+            } else {
+                console.log("[Stream Debug] endResponseStream: isCancellationPending is true. Ignoring end signal. No streaming message found.");
+            }
+            return; // Do not finalize or save history.
+        }
+
         const streamedMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
         if (!streamedMessage) {
-          console.error("[Stream Debug] No streaming message element found to finalize");
+          console.log("[Stream Debug] endResponseStream: No streaming message found to finalize (and no cancellation pending).");
+          return;
+        }
+
+        // Fallback check for the specific element, though isCancellationPending should have caught it.
+        if (streamedMessage.dataset.clientCancelled === "true") {
+          console.log("[Stream Debug] endResponseStream: Ignoring end for a stream element marked clientCancelled (fallback):", streamedMessage.id);
+          if (streamedMessage.parentNode) streamedMessage.remove();
           return;
         }
         
@@ -2157,33 +2245,37 @@
 
       case "requestCancelled": // Message from extension confirming cancellation attempt
         console.log("[Webview] Received requestCancelled message.");
-        // Now that the extension has confirmed cancellation attempt, fully reset UI
-        
-        // Set cancellation flag (in case it wasn't already set)
-        isRequestCancelled = true;
-        
+        console.log("[Webview] Received requestCancelled message from extension.");
+        isCancellationPending = false; // Cancellation process is now complete. Safe for new operations.
+        // isRequestCancelled (old flag) is not used.
+
         // Remove any loading indicators
         const loadingIndicatorsOnCancel = chatMessages.querySelectorAll(".loading-indicator");
-        loadingIndicatorsOnCancel.forEach((indicator) => {
-            console.log("[Webview] Removing loading indicator on cancellation confirmation.");
-            indicator.remove();
-        });
+        loadingIndicatorsOnCancel.forEach((indicator) => indicator.remove());
         
-        // Remove any currently streaming message
-        const streamingMessageOnCancel = document.querySelector('.message.ai-message[data-streaming="true"]');
-        if (streamingMessageOnCancel) {
-            console.log("[Webview] Removing streaming message on cancellation.");
-            streamingMessageOnCancel.remove();
+        // Remove the specific DOM element that was tagged when the user clicked cancel
+        const clientCancelledMsgEl = document.querySelector('.message.ai-message[data-client-cancelled="true"]');
+        if (clientCancelledMsgEl) {
+            console.log("[Webview] requestCancelled: Removing DOM element tagged as clientCancelled:", clientCancelledMsgEl.id);
+            if (clientCancelledMsgEl.parentNode) clientCancelledMsgEl.remove();
+        } else {
+            // If no such tagged element is found, it might have been removed by append/end handlers already.
+            // Or, if a new stream started and was then caught by isCancellationPending=true logic, it might also be gone.
+            // We could try to remove any generic [data-streaming="true"] as a last resort, but it's risky
+            // if a new legitimate stream started *exactly* as this message arrived.
+            // Given the isCancellationPending guard in append/end, this should be less of an issue.
+            console.log("[Webview] requestCancelled: No message with 'data-client-cancelled' found. Assumed cleaned up or was not streaming.");
         }
         
-        addMessageToChat("AI request cancelled.", false); // System message
-        setSendButtonState("send"); // Fully reset button state
-        if (chatInput) chatInput.disabled = false; // Ensure input is enabled
-        console.log("[Webview] Added cancellation message and finalized UI.");
-        // No need to call finalizeChatTurn here, as UI is explicitly set.
+        addMessageToChat("AI request cancelled.", false); 
+        setSendButtonState("send"); // Re-enables input, resets button.
+        if (chatInput) chatInput.disabled = false; 
+        console.log("[Webview] Processed requestCancelled. isCancellationPending is now false. UI reset.");
         break;
 
       case "generationFailed": // New message to handle generation errors
+        // If a generation fails, it's similar to a cancellation being complete from client's POV for that attempt.
+        isCancellationPending = false; // No longer waiting for this specific failed request's cancellation.
         console.error("[Webview] Received generationFailed message. AI generation failed."); // Log the error in the webview console
         // Explicitly remove loading indicators before adding the failure message
         const loadingIndicatorsOnFail = chatMessages.querySelectorAll(".loading-indicator");

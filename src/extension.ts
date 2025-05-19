@@ -7,6 +7,7 @@ import { SUPPORTED_EXTENSIONS } from "./codeParser";
 let sidebarProvider: SidebarProvider;
 let ragService: RAGService;
 let typingTimeout: NodeJS.Timeout | undefined;
+let currentRequestId = 0; // Add a counter for unique request IDs
 
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
@@ -33,7 +34,10 @@ export function activate(context: vscode.ExtensionContext) {
   const suggestTestCaseCommand = vscode.commands.registerCommand(
     "tdd-ai-companion.suggestTestCase",
     async (userMessage: string, cancellationToken?: vscode.CancellationToken) => {
-      console.log("[suggestTestCaseCommand] Received userMessage from sidebar:", userMessage); // Log the incoming message
+      // Increment request ID for each new request
+      currentRequestId++;
+      const requestId = currentRequestId;
+      console.log(`[suggestTestCaseCommand] Received userMessage from sidebar: ${userMessage} (Request ID: ${requestId})`); // Log the incoming message with ID
       // Debug
       console.log(sidebarProvider.getCurrentFeature());
       console.log(sidebarProvider.getSourceFiles());
@@ -144,12 +148,15 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // Call the Gemini API with streaming (callGenerativeApi now returns an object)
-            const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal);
+            // Pass the request ID to the API call function
+            const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal, requestId);
             
             // Check if cancelled after API call completed
-            if (abortController.signal.aborted) {
-              console.log("[suggestTestCaseCommand] Request was cancelled during or after API call");
-              return; // Don't process the response if cancelled
+            // Also check if this response is for the *current* active request ID in the sidebar provider
+            // This is a belt-and-suspenders approach with the webview's handling
+            if (abortController.signal.aborted || sidebarProvider.getCurrentRequestId() !== requestId) {
+              console.log(`[suggestTestCaseCommand] Request was cancelled during or after API call (Request ID: ${requestId}). Current sidebar request ID: ${sidebarProvider.getCurrentRequestId()}`);
+              return; // Don't process the response if cancelled or not the current request
             }
             
             // The responses are now streamed directly to the webview, but we still need to:
@@ -162,32 +169,33 @@ export function activate(context: vscode.ExtensionContext) {
             const totalInputTokens = Math.ceil(JSON.stringify(llmInputPayload).length / 4);
             
             // Update the conversation history with the complete response
-            // Only if not cancelled
-            if (!abortController.signal.aborted) {
+            // Only if not cancelled and it's the current request
+            if (!abortController.signal.aborted && sidebarProvider.getCurrentRequestId() === requestId) {
               sidebarProvider.updateLastResponse(responseText, responseTokenCount, totalInputTokens);
             }
             } catch (error: any) {
             if (error.name === 'AbortError') {
-              console.log("[suggestTestCaseCommand] Fetch request aborted successfully.");
+              console.log(`[suggestTestCaseCommand] Fetch request aborted successfully (Request ID: ${requestId}).`);
               // The SidebarProvider's cancelCurrentRequest already posts 'requestCancelled'
               // message to the webview, which updates the UI. No need for an extra message here.
             } else {
-              console.error("[suggestTestCaseCommand] Error during generation:", error);
+              console.error(`[suggestTestCaseCommand] Error during generation (Request ID: ${requestId}):`, error);
               vscode.window.showErrorMessage(
                 `Error generating test suggestions: ${error instanceof Error ? error.message : String(error)}`
               );
-              // Also inform the webview about the failure
+              // Also inform the webview about the failure, passing the request ID
               if (sidebarProvider && sidebarProvider._view) {
-                 sidebarProvider._view.webview.postMessage({ command: "generationFailed" });
+                 sidebarProvider._view.webview.postMessage({ command: "generationFailed", requestId: requestId });
               }
             }
           } finally {
-            console.log("[suggestTestCaseCommand] Finalizing request.");
+            console.log(`[suggestTestCaseCommand] Finalizing request (Request ID: ${requestId}).`);
             // Dispose listeners
             sidebarTokenDisposable?.dispose();
             progressTokenDisposable?.dispose(); // Use ?. for safety
             // Clean up CancellationTokenSource in SidebarProvider
-            sidebarProvider.finalizeRequest();
+            // Pass the request ID to finalizeRequest
+            sidebarProvider.finalizeRequest(requestId);
           }
         }
       );
@@ -513,7 +521,8 @@ interface ChatMessage {
 async function callGenerativeApi(
   prompt: string, // This is the original user query from the sidebar
   conversationHistory: ChatMessage[] = [],
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  requestId?: number // Accept the request ID
 ): Promise<{ responseText: string; llmInputPayload: GeminiContent[] }> { // llmInputPayload is now GeminiContent[]
   const config = vscode.workspace.getConfiguration("tddAICompanion");
   const geminiApiKey = config.get("geminiApiKey") as string;
@@ -634,10 +643,11 @@ async function callGenerativeApi(
     let decoder = new TextDecoder();
     let buffer = "";
     
-    // Add initial message to UI before starting the stream
+    // Add initial message to UI before starting the stream, passing the request ID
     if (sidebarProvider && sidebarProvider._view) {
       sidebarProvider._view.webview.postMessage({
-        command: "startResponseStream"
+        command: "startResponseStream",
+        requestId: requestId // Pass the request ID
       });
     }
 
@@ -688,39 +698,40 @@ async function callGenerativeApi(
               
               // Send the chunk to the webview
               if (sidebarProvider && sidebarProvider._view) {
-                console.log("[SSE Debug] Sending chunk to webview, isFirstChunk:", firstChunk);
+                console.log(`[SSE Debug] Sending chunk to webview (Request ID: ${requestId}), isFirstChunk: ${firstChunk}`);
                 sidebarProvider._view.webview.postMessage({
                   command: "appendResponseChunk",
                   chunk: chunkContent,
-                  isFirstChunk: firstChunk
+                  isFirstChunk: firstChunk,
+                  requestId: requestId // Pass the request ID
                 });
                 firstChunk = false;
               }
             } else {
-              console.log("[SSE Debug] Message doesn't contain expected content structure:", parsedData);
+              console.log(`[SSE Debug] Message doesn't contain expected content structure (Request ID: ${requestId}):`, parsedData);
             }
           } catch (e) {
-            console.error("[SSE Debug] Error parsing SSE message JSON:", e, data);
+            console.error(`[SSE Debug] Error parsing SSE message JSON (Request ID: ${requestId}):`, e, data);
           }
         }
       }
       
       // Final decoding to catch any remaining text
       buffer += decoder.decode();
-      console.log("[SSE Debug] Final buffer after stream completion:", buffer);
+      console.log(`[SSE Debug] Final buffer after stream completion (Request ID: ${requestId}):`, buffer);
       let processedBuffer = processSSEBuffer(buffer);
-      console.log("[SSE Debug] Final processing found", processedBuffer.messages.length, "messages");
+      console.log(`[SSE Debug] Final processing found ${processedBuffer.messages.length} messages (Request ID: ${requestId})`);
       
       // Process any remaining complete messages
       for (const data of processedBuffer.messages) {
         if (data === '[DONE]') {
-          console.log("[SSE Debug] Skipping final [DONE] message");
+          console.log(`[SSE Debug] Skipping final [DONE] message (Request ID: ${requestId})`);
           continue;
         }
         
         try {
           const parsedData = JSON.parse(data);
-          console.log("[SSE Debug] Parsed final message JSON");
+          console.log(`[SSE Debug] Parsed final message JSON (Request ID: ${requestId})`);
           
           if (parsedData.candidates && 
               parsedData.candidates[0] && 
@@ -730,50 +741,54 @@ async function callGenerativeApi(
               parsedData.candidates[0].content.parts[0].text) {
             
             const chunkContent = parsedData.candidates[0].content.parts[0].text;
-            console.log("[SSE Debug] Final chunk content:", chunkContent);
+            console.log(`[SSE Debug] Final chunk content (Request ID: ${requestId}):`, chunkContent);
             
             // Append to the full response
             responseText += chunkContent;
             
             // Send the chunk to the webview
             if (sidebarProvider && sidebarProvider._view) {
-              console.log("[SSE Debug] Sending final chunk to webview");
+              console.log(`[SSE Debug] Sending final chunk to webview (Request ID: ${requestId})`);
               sidebarProvider._view.webview.postMessage({
                 command: "appendResponseChunk",
                 chunk: chunkContent,
-                isFirstChunk: firstChunk
+                isFirstChunk: firstChunk,
+                requestId: requestId // Pass the request ID
               });
               firstChunk = false;
             }
           } else {
-            console.log("[SSE Debug] Final message doesn't contain expected structure:", parsedData);
+            console.log(`[SSE Debug] Final message doesn't contain expected structure (Request ID: ${requestId}):`, parsedData);
           }
         } catch (e) {
-          console.error("[SSE Debug] Error parsing final SSE message JSON:", e, data);
+          console.error(`[SSE Debug] Error parsing final SSE message JSON (Request ID: ${requestId}):`, e, data);
         }
       }    } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log("Stream reading aborted");
+        console.log(`Stream reading aborted (Request ID: ${requestId})`);
         // Don't send any more messages to the webview for aborted requests
         // We'll let the outer try/catch handle this by checking the cancellation flag
         throw error; // Re-throw AbortError to be caught in the outer catch block
       }
-      console.error("Error reading stream:", error);
+      console.error(`Error reading stream (Request ID: ${requestId}):`, error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Error reading stream: ${errorMessage}`);
     } finally {
-      // Only send the completion message if we weren't cancelled
-      // Check if the abort signal was triggered
-      if (!(abortSignal && abortSignal.aborted)) {
-        // Send a message to indicate the stream is complete
+      console.log(`[SSE Debug] Stream reading finished or aborted (Request ID: ${requestId}).`);
+      // Only send the completion message if we weren't cancelled AND it's the current request
+      // This check is crucial to prevent sending end signals for old, completed requests
+      // that finished just as a new request started.
+      if (!(abortSignal && abortSignal.aborted) && sidebarProvider.getCurrentRequestId() === requestId) {
+        console.log(`[SSE Debug] Sending endResponseStream command (Request ID: ${requestId}).`);
         if (sidebarProvider && sidebarProvider._view) {
           sidebarProvider._view.webview.postMessage({
             command: "endResponseStream",
-            fullResponse: responseText
+            fullResponse: responseText,
+            requestId: requestId // Pass the request ID
           });
         }
       } else {
-        console.log("Stream was aborted, not sending endResponseStream command");
+        console.log(`[SSE Debug] Stream was aborted or not the current request (Request ID: ${requestId}). Not sending endResponseStream command.`);
       }
     }
 
@@ -792,8 +807,8 @@ async function callGenerativeApi(
     
     console.error("Error calling Gemini API:", error);
     
-    // Only send a failure message if it wasn't a cancellation
-    if (sidebarProvider && !(abortSignal && abortSignal.aborted)) {
+    // Only send a failure message if it wasn't a cancellation AND it's the current request
+    if (sidebarProvider && !(abortSignal && abortSignal.aborted) && sidebarProvider.getCurrentRequestId() === requestId) {
         sidebarProvider.addResponse("AI failed to generate a response."); 
     }
     
@@ -803,6 +818,21 @@ async function callGenerativeApi(
       }`
     );
   }
+}
+// Add a method to SidebarProvider to get the current request ID
+// This will be implemented in SidebarProvider.ts
+// For now, we'll assume it exists and returns the ID of the request
+// that the sidebar is currently expecting a response for.
+// The SidebarProvider will need to update this ID when a new request starts
+// and when a request is finalized/cancelled.
+// This method is used in extension.ts to check if a received response/event
+// is still relevant to the currently active request in the UI.
+declare module "./SidebarProvider" {
+    interface SidebarProvider {
+        getCurrentRequestId(): number | undefined;
+        // finalizeRequest method should also accept the request ID
+        finalizeRequest(requestId?: number): void;
+    }
 }
 
 // Helper function to process SSE buffer into complete messages
