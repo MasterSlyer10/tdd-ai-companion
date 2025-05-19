@@ -14,6 +14,7 @@
   let currentTokenCount = 0; // Token counter
   const TOKEN_LIMIT = 100000; // Token limit
   let isRequestCancelled = false; // Flag to track if the current request is cancelled
+  let activePromptId = null; // Track the ID of the currently active prompt
 
   // DOM Elements
   let tokenCountDisplay = null; // To display token count
@@ -108,8 +109,9 @@
     // Load checked items from storage
     loadCheckedItemsFromState();
 
-    // Reset cancellation flag on init
+    // Reset cancellation flag and active prompt ID on init
     isRequestCancelled = false;
+    activePromptId = null;
 
     // Load token count from state
     loadTokenCountFromState();
@@ -932,8 +934,9 @@
     if (sendButton.dataset.state === "stop") {
       console.log("Stop button clicked");
       vscode.postMessage({ command: "cancelRequest" });
-      setSendButtonState("stopping"); 
+      setSendButtonState("stopping");
       isRequestCancelled = true; // Global flag for immediate effect
+      activePromptId = null; // Invalidate the active prompt ID on cancellation
 
       // Mark the currently streaming message, if any, as explicitly cancelled
       const streamingMsg = document.querySelector('.message.ai-message[data-streaming="true"]');
@@ -988,8 +991,12 @@
     setSendButtonState("stop"); // Change to Stop button
     isRequestCancelled = false; // Reset cancellation flag for new request
 
+    // Generate a unique prompt ID for this request
+    const promptId = Date.now().toString();
+    activePromptId = promptId; // Set the active prompt ID
+
     // Add message to UI
-    addMessageToChat(message, true);
+    addMessageToChat(message, true, promptId); // Pass promptId to addMessageToChat
 
     // Clear input field
     chatInput.value = "";
@@ -1003,10 +1010,11 @@
     // Scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Send message to extension
+    // Send message to extension with the prompt ID
     vscode.postMessage({
       command: "requestTestSuggestion",
       message: message,
+      promptId: promptId, // Include the prompt ID
     });
   }
 
@@ -1024,8 +1032,12 @@
     setSendButtonState("stop"); // Change to Stop button
     isRequestCancelled = false; // Reset cancellation flag for new request
 
+    // Generate a unique prompt ID for this request
+    const promptId = Date.now().toString();
+    activePromptId = promptId; // Set the active prompt ID
+
     // Add message to UI
-    addMessageToChat(predefinedMessage, true);
+    addMessageToChat(predefinedMessage, true, promptId); // Pass promptId to addMessageToChat
 
     // Clear input field
     if (chatInput) {
@@ -1041,10 +1053,11 @@
     // Scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Send message to extension
+    // Send message to extension with the prompt ID
     vscode.postMessage({
       command: "requestTestSuggestion",
       message: predefinedMessage,
+      promptId: promptId, // Include the prompt ID
     });
   }
 
@@ -1062,8 +1075,12 @@
     setSendButtonState("stop"); // Change to Stop button
     isRequestCancelled = false; // Reset cancellation flag for new request
 
+    // Generate a unique prompt ID for this request
+    const promptId = Date.now().toString();
+    activePromptId = promptId; // Set the active prompt ID
+
     // Add message to UI
-    addMessageToChat(predefinedMessage, true);
+    addMessageToChat(predefinedMessage, true, promptId); // Pass promptId to addMessageToChat
 
     // Clear input field
     if (chatInput) {
@@ -1079,15 +1096,16 @@
     // Scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Send message to extension
+    // Send message to extension with the prompt ID
     vscode.postMessage({
       command: "requestTestSuggestion",
       message: predefinedMessage,
+      promptId: promptId, // Include the prompt ID
     });
   }
 
-  // Add user message to chat UI
-  function addMessageToChat(content, isUser = false) {
+  // Add message to chat UI
+  function addMessageToChat(content, isUser = false, promptId = null) { // Accept promptId
     const messageId = `msg-${messageIdCounter++}`; // Generate unique ID
 
     // Create message element
@@ -1096,6 +1114,11 @@
     messageElement.className = isUser
       ? "message user-message"
       : "message ai-message";
+
+    // Add promptId to the message element's dataset if provided
+    if (promptId) {
+        messageElement.dataset.promptId = promptId;
+    }
 
     // Add avatar
     const avatarElement = document.createElement("div");
@@ -1448,21 +1471,6 @@
     saveChatHistory(); // Save history after AI message deletion and potential button addition
   }
 
-  function handleDeleteUserMessage(messageElement) {
-    if (messageElement && messageElement.parentNode === chatMessages) {
-      // Remove this message and all subsequent messages
-      let currentMsg = messageElement;
-      while (currentMsg) {
-        const nextMsg = currentMsg.nextElementSibling;
-        if (chatMessages.contains(currentMsg)) {
-          chatMessages.removeChild(currentMsg);
-        }
-        currentMsg = nextMsg;
-      }
-      saveChatHistory(); // Update the history after deletion
-    }
-  }
-
   function handleEditUserMessage(messageElement, contentElement, originalRawContent) {
     // Prevent editing if already in edit mode
     if (contentElement.querySelector('textarea.edit-area')) {
@@ -1545,7 +1553,7 @@
       let currentMsg = messageElement.nextElementSibling;
       while (currentMsg) {
         const toRemove = currentMsg;
-        currentMsg = currentMsg.nextElementSibling;
+        currentMsg = currentMsg.nextElementSibling;  // Fixed: properly declare and update currentMsg
         if (chatMessages.contains(toRemove)) {
           chatMessages.removeChild(toRemove);
         }
@@ -1558,21 +1566,31 @@
       const loadingElement = document.createElement("div");
       loadingElement.className = "loading-indicator";
       loadingElement.textContent = "Generating response...";
-      chatMessages.appendChild(loadingElement); // Append to main chat area
+      chatMessages.appendChild(loadingElement);
       chatMessages.scrollTop = chatMessages.scrollHeight;
 
+      // Generate a new prompt ID for this edited request
+      const promptId = Date.now().toString();
+      activePromptId = promptId;
+
+      // Cancel any existing request before sending the new one
+      vscode.postMessage({ command: "cancelRequest" });
+      isRequestCancelled = false;  // Reset cancellation flag
+
+      // Send the edited message to extension with the new prompt ID
       vscode.postMessage({
         command: "requestTestSuggestion",
         message: newContent,
+        promptId: promptId,
       });
 
       // 4a. Set button state to "stop" to indicate generation and hide actions
-      setSendButtonState("stop"); 
+      setSendButtonState("stop");
 
-      // 5. Refresh file tree (as per original "reload" functionality)
+      // 5. Refresh file tree
       requestWorkspaceFiles();
 
-      // 6. Restore original action buttons (they will be hidden by setSendButtonState via updateMessageActionsVisibility)
+      // 6. Restore original action buttons
       restoreOriginalActions(messageElement);
     };
 
@@ -1601,20 +1619,13 @@
               }
           });
 
-          const isCurrentlyGenerating = sendButton.dataset.state === "stop" || sendButton.dataset.state === "stopping";
+          // Remove the 'editing' class
+          messageElement.classList.remove('editing');
 
-          // Restore original action buttons (Copy, Edit, Delete)
-          actionsElement.querySelectorAll('.message-action-button').forEach(btn => {
-              if (btn.classList.contains('edit-button') || btn.classList.contains('delete-button')) {
-                  btn.style.display = isCurrentlyGenerating ? 'none' : 'flex';
-              } else if (btn.classList.contains('copy-button')) {
-                  btn.style.display = 'flex'; // Copy button is always visible
-              }
-              // Rerun button's visibility is managed by updateMessageActionsVisibility if it exists
-          });
+          // Do NOT explicitly set display style for original buttons here.
+          // Their visibility will be managed by updateMessageActionsVisibility
+          // which is called by setSendButtonState.
       }
-      // Remove 'editing' class from the message element
-      messageElement.classList.remove('editing');
   }
 
   // handleSaveUserEdit and handleCancelUserEdit are no longer needed.
@@ -1647,6 +1658,7 @@
         break;
 
       case "addResponse":
+        // This command is likely deprecated with streaming, but keep for safety.
         // If the request was cancelled on the frontend, ignore this response
         if (isRequestCancelled) {
             console.log("Received response after cancellation, ignoring.");
@@ -1707,106 +1719,117 @@
         break;
 
       case "startResponseStream":
-        console.log("[Stream Debug] Received startResponseStream command");
+        console.log("[Stream Debug] Received startResponseStream command with promptId:", message.promptId);
+        // Check if the received promptId matches the active promptId
+        if (message.promptId !== activePromptId) {
+            console.log("[Stream Debug] Received startResponseStream for old promptId, ignoring.");
+            return;
+        }
+
         // Remove any loading indicators before we start streaming
         document.querySelectorAll(".loading-indicator").forEach(indicator => indicator.remove());
-        
+
+        // Remove any previous streaming message if it exists (shouldn't happen with promptId check, but as a safeguard)
+        const existingStreamingMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
+        if (existingStreamingMessage) {
+             console.log("[Stream Debug] Removing existing streaming message before starting new stream.");
+             existingStreamingMessage.remove();
+        }
+
         // Create a new message element for the streaming response
         const streamingMessageElement = document.createElement("div");
         streamingMessageElement.id = `msg-${messageIdCounter++}`;
         streamingMessageElement.className = "message ai-message";
         streamingMessageElement.dataset.streaming = "true"; // Mark as streaming
-        console.log("[Stream Debug] Created streaming message element with ID:", streamingMessageElement.id);
-        
+        streamingMessageElement.dataset.promptId = message.promptId; // Store the promptId on the element
+        console.log("[Stream Debug] Created streaming message element with ID:", streamingMessageElement.id, "and promptId:", streamingMessageElement.dataset.promptId);
+
         // Add avatar
         const avatarElement = document.createElement("div");
         avatarElement.className = "message-avatar";
         avatarElement.innerHTML = '<i class="codicon codicon-beaker"></i>';
         streamingMessageElement.appendChild(avatarElement);
-        
+
         // Add content container
         const contentElement = document.createElement("div");
         contentElement.className = "message-content";
-        
+
         // Create wrapper for content and actions
         const contentWrapper = document.createElement("div");
         contentWrapper.className = "message-content-wrapper";
         contentWrapper.appendChild(contentElement);
-        
+
         // Add the actions container (initially empty)
         const actionsElement = document.createElement("div");
         actionsElement.className = "message-actions";
         contentWrapper.appendChild(actionsElement);
-        
+
         streamingMessageElement.appendChild(contentWrapper);
         chatMessages.appendChild(streamingMessageElement);
         console.log("[Stream Debug] Streaming message element added to DOM");
-        
+
         // Scroll to the bottom to show the new message
         chatMessages.scrollTop = chatMessages.scrollHeight;
         break;
-        
-      case "appendResponseChunk":
-        console.log("[Stream Debug] Received appendResponseChunk command. Chunk:", message.chunk, "Is first chunk:", message.isFirstChunk);
-        
-        // Find the streaming message element
-        const currentStreamingMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
 
-        if (!currentStreamingMessage) {
-          // This can happen if the message was removed by 'requestCancelled' handler from extension
-          // or if startResponseStream hasn't been processed yet for some reason.
-          console.log("[Stream Debug] No streaming message element found for appendResponseChunk, ignoring chunk. Potentially from a cancelled and removed stream.");
-          return; 
+      case "appendResponseChunk":
+        console.log("[Stream Debug] Received appendResponseChunk command. Chunk:", message.chunk, "Is first chunk:", message.isFirstChunk, "PromptId:", message.promptId);
+
+        // Check if the received promptId matches the active promptId
+        if (message.promptId !== activePromptId) {
+            console.log("[Stream Debug] Received appendResponseChunk for old promptId, ignoring.");
+            return;
         }
 
-        // Check if this specific stream was explicitly cancelled by user action
+        // Find the streaming message element for this promptId
+        const currentStreamingMessage = document.querySelector(`.message.ai-message[data-streaming="true"][data-prompt-id="${message.promptId}"]`);
+
+        if (!currentStreamingMessage) {
+          console.log("[Stream Debug] No streaming message element found for appendResponseChunk with matching promptId, ignoring chunk.");
+          return;
+        }
+
+        // Check if this specific stream was explicitly cancelled by user action (redundant with activePromptId check, but keep for safety)
         if (currentStreamingMessage.dataset.explicitlyCancelled === "true") {
           console.log("[Stream Debug] Ignoring appendResponseChunk for explicitly user-cancelled stream:", currentStreamingMessage.id);
           if (currentStreamingMessage.parentNode) currentStreamingMessage.remove(); // Ensure cleanup
-          return; 
-        }
-        
-        // Global cancellation flag check (e.g., if cancellation happened before stream element was created or flagged by user action)
-        if (isRequestCancelled) { 
-          console.log("[Stream Debug] Request was globally cancelled (isRequestCancelled=true), ignoring appendResponseChunk and removing message:", currentStreamingMessage.id);
-          if (currentStreamingMessage.parentNode) currentStreamingMessage.remove(); // Ensure cleanup
           return;
         }
-        
+
         const contentEl = currentStreamingMessage.querySelector('.message-content');
         if (!contentEl) {
           console.error("[Stream Debug] No content element found in streaming message");
           return;
         }
-        
+
         // Get current raw text content or initialize it
         if (!currentStreamingMessage.dataset.rawText) {
           console.log("[Stream Debug] Initializing rawText in dataset");
           currentStreamingMessage.dataset.rawText = '';
         }
-        
+
         // Append the new chunk to the raw text
         currentStreamingMessage.dataset.rawText += message.chunk;
         console.log("[Stream Debug] Updated rawText, new length:", currentStreamingMessage.dataset.rawText.length);
-        
+
         // Special handling for thinking and answer sections
         const currentRawText = currentStreamingMessage.dataset.rawText;
-        
+
         // Check if we have thinking and answer markers
         const hasThinkingMarker = currentRawText.includes('**Thinking:**');
         const hasAnswerMarker = currentRawText.includes('**Answer:**');
-        
+
         // If we have both markers, we can split the content
         if (hasThinkingMarker && hasAnswerMarker) {
           console.log("[Stream Debug] Found both thinking and answer markers");
           const thinkingStart = currentRawText.indexOf('**Thinking:**');
           const answerStart = currentRawText.indexOf('**Answer:**');
-          
+
           if (thinkingStart >= 0 && answerStart > thinkingStart) {
             // Extract thinking and answer parts
             const thinkingPart = currentRawText.substring(thinkingStart + 13, answerStart).trim();
             const answerPart = currentRawText.substring(answerStart + 11).trim();
-            
+
             // Create or update the thinking section
             let thinkingSection = contentEl.querySelector('.thinking-section');
             if (!thinkingSection) {
@@ -1816,7 +1839,7 @@
               contentEl.innerHTML = '';
               contentEl.appendChild(thinkingSection);
             }
-            
+
             // Update thinking content
             const thinkingContent = thinkingSection.querySelector('.thinking-content');
             if (thinkingContent) {
@@ -1828,7 +1851,7 @@
                 });
               }
             }
-            
+
             // Create or update the answer section
             let answerSection = contentEl.querySelector('.answer-section');
             if (!answerSection) {
@@ -1836,7 +1859,7 @@
               answerSection.className = 'answer-section';
               contentEl.appendChild(answerSection);
             }
-            
+
             // Update answer content
             answerSection.innerHTML = marked.parse(answerPart);
             // Apply syntax highlighting to answer content
@@ -1853,7 +1876,7 @@
           const codeBlockStarts = (currentRawText.match(/```/g) || []).length;
           const isInCodeBlock = codeBlockStarts % 2 !== 0;
           console.log("[Stream Debug] Code block analysis - Starts:", codeBlockStarts, "Is in code block:", isInCodeBlock);
-          
+
           try {
             // If we're in the middle of a code block, we'll just add the raw text for now
             // and wait until the code block is complete before rendering markdown
@@ -1873,7 +1896,7 @@
                 tempCodeBlock.style.marginTop = '0.7em';
                 tempCodeBlock.style.marginBottom = '0.7em';
                 tempCodeBlock.style.overflow = 'auto';
-                
+
                 // Find where the last code block starts and only show content after that
                 const lastCodeBlockStart = currentRawText.lastIndexOf('```');
                 console.log("[Stream Debug] Last code block start index:", lastCodeBlockStart);
@@ -1885,21 +1908,21 @@
                   language = textAfterTicks.substring(0, firstLineEnd).trim();
                   console.log("[Stream Debug] Detected language for code block:", language);
                 }
-                
+
                 // Set a data attribute for the language for later highlighting
                 tempCodeBlock.dataset.language = language;
-                
+
                 // Add the code content so far (excluding the opening ticks and language)
-                const codeContent = firstLineEnd > 0 ? 
-                  textAfterTicks.substring(firstLineEnd + 1) : 
+                const codeContent = firstLineEnd > 0 ?
+                  textAfterTicks.substring(firstLineEnd + 1) :
                   textAfterTicks;
                 console.log("[Stream Debug] Code content length:", codeContent.length);
-                  
+
                 tempCodeBlock.textContent = codeContent;
-                
+
                 // Replace any existing content with our parsed version
                 contentEl.innerHTML = '';
-                
+
                 // Render the content before the code block as markdown
                 if (lastCodeBlockStart > 0) {
                   const contentBeforeCodeBlock = currentRawText.substring(0, lastCodeBlockStart);
@@ -1908,7 +1931,7 @@
                   beforeElement.innerHTML = marked.parse(contentBeforeCodeBlock);
                   contentEl.appendChild(beforeElement);
                 }
-                
+
                 // Add our temp code block
                 contentEl.appendChild(tempCodeBlock);
                 console.log("[Stream Debug] Temp code block added to DOM");
@@ -1916,20 +1939,20 @@
                 console.log("[Stream Debug] Updating existing temporary code block");
                 // Update the existing temp code block with the latest content
                 const tempCodeBlock = contentEl.querySelector('.temp-code-block');
-                
+
                 // Find where the last code block starts
                 const lastCodeBlockStart = currentRawText.lastIndexOf('```');
-                
+
                 // Extract language if specified
                 const textAfterTicks = currentRawText.substring(lastCodeBlockStart + 3);
                 const firstLineEnd = textAfterTicks.indexOf('\n');
-                
+
                 // Get the code content (excluding the opening ticks and language)
-                const codeContent = firstLineEnd > 0 ? 
-                  textAfterTicks.substring(firstLineEnd + 1) : 
+                const codeContent = firstLineEnd > 0 ?
+                  textAfterTicks.substring(firstLineEnd + 1) :
                   textAfterTicks;
                 console.log("[Stream Debug] Updated code content length:", codeContent.length);
-                  
+
                 tempCodeBlock.textContent = codeContent;
               }
             } else {
@@ -1939,7 +1962,7 @@
               if (typeof marked !== "undefined") {
                 console.log("[Stream Debug] Using marked to render markdown");
                 contentEl.innerHTML = marked.parse(currentRawText);
-                
+
                 // Apply syntax highlighting to all complete code blocks
                 if (typeof Prism !== "undefined") {
                   console.log("[Stream Debug] Applying Prism syntax highlighting");
@@ -1959,58 +1982,56 @@
             contentEl.textContent = currentRawText;
           }
         }
-        
+
         // Scroll to the bottom as content is added
         chatMessages.scrollTop = chatMessages.scrollHeight;
         break;
-        
+
       case "endResponseStream":
-        console.log("[Stream Debug] Received endResponseStream command");
-        
-        const streamedMessage = document.querySelector('.message.ai-message[data-streaming="true"]');
+        console.log("[Stream Debug] Received endResponseStream command with promptId:", message.promptId);
+
+        // Check if the received promptId matches the active promptId
+        if (message.promptId !== activePromptId) {
+            console.log("[Stream Debug] Received endResponseStream for old promptId, ignoring.");
+            return;
+        }
+
+        const streamedMessage = document.querySelector(`.message.ai-message[data-streaming="true"][data-prompt-id="${message.promptId}"]`);
 
         if (!streamedMessage) {
-          console.log("[Stream Debug] No streaming message element found to finalize for endResponseStream. Potentially from a cancelled and removed stream.");
+          console.log("[Stream Debug] No streaming message element found to finalize for endResponseStream with matching promptId. Potentially from a cancelled and removed stream.");
           return; // Do not call finalizeChatTurn() or saveChatHistory()
         }
 
-        // Check if this specific stream was explicitly cancelled by user action
+        // Check if this specific stream was explicitly cancelled by user action (redundant with activePromptId check, but keep for safety)
         if (streamedMessage.dataset.explicitlyCancelled === "true") {
           console.log("[Stream Debug] Ignoring endResponseStream for explicitly user-cancelled stream:", streamedMessage.id);
           if (streamedMessage.parentNode) streamedMessage.remove(); // Ensure cleanup
           return; // Do not call finalizeChatTurn() or saveChatHistory()
         }
-        
-        // Global cancellation flag check
-        if (isRequestCancelled) {
-          console.log("[Stream Debug] Request was globally cancelled (isRequestCancelled=true) during endResponseStream, removing message:", streamedMessage.id);
-          if (streamedMessage.parentNode) streamedMessage.remove(); // Ensure cleanup
-          // The UI should have been reset by the "requestCancelled" message handler or stop button.
-          return; 
-        }
-        
+
         // Get the raw text that was accumulated during streaming
         const rawText = streamedMessage.dataset.rawText || message.fullResponse || '';
         console.log("[Stream Debug] Final raw text length:", rawText.length);
-        
+
         // Get the content element
         const streamedContentEl = streamedMessage.querySelector('.message-content');
-        
+
         // Check if we have thinking and answer markers for final rendering
         const hasThinkingMarkerFinal = rawText.includes('**Thinking:**');
         const hasAnswerMarkerFinal = rawText.includes('**Answer:**');
-        
+
         // Final render with thinking/answer sections
         if (hasThinkingMarkerFinal && hasAnswerMarkerFinal) {
           console.log("[Stream Debug] Final render with thinking/answer sections");
           const thinkingStartFinal = rawText.indexOf('**Thinking:**');
           const answerStartFinal = rawText.indexOf('**Answer:**');
-          
+
           if (thinkingStartFinal >= 0 && answerStartFinal > thinkingStartFinal) {
             // Extract thinking and answer parts
             const thinkingPartFinal = rawText.substring(thinkingStartFinal + 13, answerStartFinal).trim();
             const answerPartFinal = rawText.substring(answerStartFinal + 11).trim();
-            
+
             // Create or update the thinking section
             let thinkingSectionFinal = streamedContentEl.querySelector('.thinking-section');
             if (!thinkingSectionFinal) {
@@ -2019,11 +2040,11 @@
               thinkingSectionFinal.innerHTML = '<div class="thinking-header"><span class="thinking-title">Thinking</span><button class="thinking-toggle"><i class="codicon codicon-chevron-down"></i></button></div><div class="thinking-content"></div>';
               streamedContentEl.innerHTML = '';
               streamedContentEl.appendChild(thinkingSectionFinal);
-              
+
               // Remove the local toggle function and click handlers
               // as we now use the global document click handler
             }
-            
+
             // Update thinking content
             const thinkingContentFinal = thinkingSectionFinal.querySelector('.thinking-content');
             if (thinkingContentFinal) {
@@ -2035,7 +2056,7 @@
                 });
               }
             }
-            
+
             // Create or update the answer section
             let answerSectionFinal = streamedContentEl.querySelector('.answer-section');
             if (!answerSectionFinal) {
@@ -2043,7 +2064,7 @@
               answerSectionFinal.className = 'answer-section';
               streamedContentEl.appendChild(answerSectionFinal);
             }
-            
+
             // Update answer content
             answerSectionFinal.innerHTML = marked.parse(answerPartFinal);
             // Apply syntax highlighting to answer content
@@ -2052,14 +2073,14 @@
                 Prism.highlightElement(block);
               });
             }
-            
+
             // Auto-collapse thinking section now that we're done streaming
             console.log("[Stream Debug] Auto-collapsing thinking section after streaming");
             const icon = thinkingSectionFinal.querySelector('.thinking-toggle i');
             if (icon) {
               icon.className = 'codicon codicon-chevron-right';
             }
-            
+
             // Ensure content styles are also updated when collapsing
             const content = thinkingSectionFinal.querySelector('.thinking-content');
             if (content) {
@@ -2072,7 +2093,7 @@
               content.style.paddingBottom = '0';
               content.style.transform = 'scaleY(0)';
             }
-            
+
             // Apply collapsed class after setting styles
             thinkingSectionFinal.classList.add('collapsed');
           }
@@ -2084,7 +2105,7 @@
               console.log("[Stream Debug] Final rendering with marked");
               // Render the full markdown content
               streamedContentEl.innerHTML = marked.parse(rawText);
-              
+
               // Apply final syntax highlighting to all code blocks
               if (typeof Prism !== "undefined") {
                 console.log("[Stream Debug] Final syntax highlighting with Prism");
@@ -2103,21 +2124,21 @@
             // Use the existing content if there's an error
           }
         }
-        
+
         // Remove the streaming flag
         streamedMessage.removeAttribute('data-streaming');
         console.log("[Stream Debug] Removed streaming flag from message");
-        
+
         // Store the full raw text for copy functionality
         streamedMessage.dataset.rawText = rawText;
-        
+
         // Add action buttons to the message
         const actionContainer = streamedMessage.querySelector('.message-actions');
         if (actionContainer) {
           console.log("[Stream Debug] Adding action buttons");
           // Clear any existing buttons first
           actionContainer.innerHTML = '';
-          
+
           // Add Copy Button
           const copyButton = document.createElement("button");
           copyButton.className = "message-action-button copy-button";
@@ -2139,7 +2160,7 @@
               });
           };
           actionContainer.appendChild(copyButton);
-          
+
           // Add Delete Button
           const deleteButton = document.createElement("button");
           deleteButton.className = "message-action-button delete-button";
@@ -2148,39 +2169,39 @@
           deleteButton.onclick = () => handleDeleteAIMessage(streamedMessage);
           actionContainer.appendChild(deleteButton);
         }
-        
+
         // Save chat history
         saveChatHistory();
         console.log("[Stream Debug] Chat history saved");
-        
+
         // Reset UI state
         finalizeChatTurn();
         console.log("[Stream Debug] UI state finalized");
         break;
-        
+
       case "updateResponseMetrics":
         // Update token counts after streaming is complete
         let metricTokens = 0;
-        
+
         // Add total input tokens for this turn
         if (typeof message.totalInputTokens === 'number') {
           metricTokens += message.totalInputTokens;
           console.log(`Input Tokens (from extension): ${message.totalInputTokens}`);
         }
-        
+
         // Add response tokens
         if (typeof message.responseTokenCount === 'number') {
           metricTokens += message.responseTokenCount;
           console.log(`AI Response Tokens: ${message.responseTokenCount}`);
         }
-        
+
         if (metricTokens > 0) {
           currentTokenCount += metricTokens;
           saveTokenCountToState();
           updateTokenDisplay();
           console.log(`Total Tokens Added (From Metrics): ${metricTokens}, New Grand Total: ${currentTokenCount}`);
         }
-        
+
         // Check token limit
         if (currentTokenCount >= TOKEN_LIMIT) {
           if (chatInput) chatInput.disabled = true;
@@ -2189,7 +2210,7 @@
           if (!tokenLimitMsg) {
             tokenLimitMsg = document.createElement("div");
             tokenLimitMsg.id = "token-limit-message";
-            tokenLimitMsg.style.color = "var(--vscode-errorForeground)"; 
+            tokenLimitMsg.style.color = "var(--vscode-errorForeground)";
             tokenLimitMsg.style.padding = "5px";
             tokenLimitMsg.textContent = `Token limit (${TOKEN_LIMIT}) reached. Please start a new chat to continue.`;
             if (chatInput && chatInput.parentNode) {
@@ -2207,23 +2228,30 @@
       case "requestCancelled": // Message from extension confirming cancellation attempt
         console.log("[Webview] Received requestCancelled message.");
         // Now that the extension has confirmed cancellation attempt, fully reset UI
-        
+
         isRequestCancelled = true; // Ensure global flag is set upon confirmation from extension
-        
+        activePromptId = null; // Invalidate the active prompt ID on cancellation
+
         // Remove any loading indicators
         const loadingIndicatorsOnCancel = chatMessages.querySelectorAll(".loading-indicator");
         loadingIndicatorsOnCancel.forEach((indicator) => {
             console.log("[Webview] Removing loading indicator on cancellation confirmation from extension.");
             indicator.remove();
         });
-        
+
         // Remove any currently streaming message. This is a definitive cleanup.
+        // Find the streaming message by the promptId that was active when cancel was clicked
+        // Note: This assumes the 'requestCancelled' message from the extension includes the promptId
+        // associated with the cancelled request. If not, we might need a different approach
+        // or rely solely on the activePromptId being set to null.
+        // For now, let's remove any message marked as streaming, as the activePromptId check
+        // in the stream handlers will prevent new chunks from appearing.
         const streamingMessageOnCancel = document.querySelector('.message.ai-message[data-streaming="true"]');
         if (streamingMessageOnCancel) {
             console.log("[Webview] Removing streaming message on cancellation confirmation from extension:", streamingMessageOnCancel.id);
             streamingMessageOnCancel.remove();
         }
-        
+
         addMessageToChat("AI request cancelled.", false); // System message
         setSendButtonState("send"); // Fully reset button state (enables input, hides action buttons if needed)
         if (chatInput) chatInput.disabled = false; // Ensure input is enabled
@@ -2379,32 +2407,32 @@
     // Check if clicked element is a thinking header or toggle button
     const thinkingHeader = e.target.closest('.thinking-header');
     const toggleButton = e.target.closest('.thinking-toggle');
-    
+
     if (thinkingHeader || toggleButton) {
       // Find the thinking section
       const thinkingSection = (thinkingHeader || toggleButton).closest('.thinking-section');
       if (thinkingSection) {
         console.log("[Stream Debug] Thinking section click detected on:", e.target);
-        
+
         // If it was the toggle button, prevent propagation to avoid double-toggle
         if (toggleButton) {
           e.stopPropagation();
         }
-        
+
         // Toggle the collapsed state
         const isCollapsed = thinkingSection.classList.contains('collapsed');
         console.log("[Stream Debug] Current state before toggle:", isCollapsed ? "collapsed" : "expanded");
-        
+
         if (isCollapsed) {
           // Expand
           thinkingSection.classList.remove('collapsed');
-          
+
           // Update icon
           const icon = thinkingSection.querySelector('.thinking-toggle i');
           if (icon) {
             icon.className = 'codicon codicon-chevron-down';
           }
-          
+
           // Make content visible immediately
           const content = thinkingSection.querySelector('.thinking-content');
           if (content) {
@@ -2417,13 +2445,13 @@
         } else {
           // Collapse
           thinkingSection.classList.add('collapsed');
-          
+
           // Update icon
           const icon = thinkingSection.querySelector('.thinking-toggle i');
           if (icon) {
             icon.className = 'codicon codicon-chevron-right';
           }
-          
+
           // Hide content
           const content = thinkingSection.querySelector('.thinking-content');
           if (content) {

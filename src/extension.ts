@@ -32,8 +32,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Suggest Test Case Command
   const suggestTestCaseCommand = vscode.commands.registerCommand(
     "tdd-ai-companion.suggestTestCase",
-    async (userMessage: string, cancellationToken?: vscode.CancellationToken) => {
-      console.log("[suggestTestCaseCommand] Received userMessage from sidebar:", userMessage); // Log the incoming message
+    async (userMessage: string, cancellationToken?: vscode.CancellationToken, promptId?: string) => { // Accept promptId
+      console.log("[suggestTestCaseCommand] START. Received userMessage:", userMessage, "with promptId:", promptId); // Log the incoming message
       // Debug
       console.log(sidebarProvider.getCurrentFeature());
       console.log(sidebarProvider.getSourceFiles());
@@ -137,6 +137,7 @@ export function activate(context: vscode.ExtensionContext) {
             console.log("[suggestTestCaseCommand] Value of 'prompt' variable before calling callGenerativeApi:", prompt);
             console.log("[suggestTestCaseCommand] Conversation history before calling callGenerativeApi:", JSON.stringify(conversationHistory, null, 2));
 
+            console.log("[suggestTestCaseCommand] Calling callGenerativeApi...");
             // Check for cancellation before making API call
             if (abortController.signal.aborted) {
               console.log("[suggestTestCaseCommand] Request cancelled before API call");
@@ -144,29 +145,30 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // Call the Gemini API with streaming (callGenerativeApi now returns an object)
-            const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal);
-            
+            const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal, promptId); // Pass promptId
+
+            console.log("[suggestTestCaseCommand] callGenerativeApi returned.");
             // Check if cancelled after API call completed
             if (abortController.signal.aborted) {
               console.log("[suggestTestCaseCommand] Request was cancelled during or after API call");
               return; // Don't process the response if cancelled
             }
-            
+
             // The responses are now streamed directly to the webview, but we still need to:
             // 1. Save the complete response to the conversation history
             // 2. Tell the sidebar provider to finalize/update any state
-            
+
             // We don't need to call addResponse here as the chunks have been sent directly,
             // but we do need to inform the sidebar about response metrics
             const responseTokenCount = Math.ceil(responseText.length / 4);
             const totalInputTokens = Math.ceil(JSON.stringify(llmInputPayload).length / 4);
-            
+
             // Update the conversation history with the complete response
             // Only if not cancelled
             if (!abortController.signal.aborted) {
-              sidebarProvider.updateLastResponse(responseText, responseTokenCount, totalInputTokens);
+              sidebarProvider.updateLastResponse(responseText, responseTokenCount, totalInputTokens, promptId); // Pass promptId
             }
-            } catch (error: any) {
+          } catch (error: any) {
             if (error.name === 'AbortError') {
               console.log("[suggestTestCaseCommand] Fetch request aborted successfully.");
               // The SidebarProvider's cancelCurrentRequest already posts 'requestCancelled'
@@ -188,6 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
             progressTokenDisposable?.dispose(); // Use ?. for safety
             // Clean up CancellationTokenSource in SidebarProvider
             sidebarProvider.finalizeRequest();
+            console.log("[suggestTestCaseCommand] END.");
           }
         }
       );
@@ -513,7 +516,8 @@ interface ChatMessage {
 async function callGenerativeApi(
   prompt: string, // This is the original user query from the sidebar
   conversationHistory: ChatMessage[] = [],
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  promptId?: string // Accept promptId
 ): Promise<{ responseText: string; llmInputPayload: GeminiContent[] }> { // llmInputPayload is now GeminiContent[]
   const config = vscode.workspace.getConfiguration("tddAICompanion");
   const geminiApiKey = config.get("geminiApiKey") as string;
@@ -637,7 +641,8 @@ async function callGenerativeApi(
     // Add initial message to UI before starting the stream
     if (sidebarProvider && sidebarProvider._view) {
       sidebarProvider._view.webview.postMessage({
-        command: "startResponseStream"
+        command: "startResponseStream",
+        promptId: promptId // Include the promptId
       });
     }
 
@@ -688,11 +693,12 @@ async function callGenerativeApi(
               
               // Send the chunk to the webview
               if (sidebarProvider && sidebarProvider._view) {
-                console.log("[SSE Debug] Sending chunk to webview, isFirstChunk:", firstChunk);
+                console.log("[SSE Debug] Sending chunk to webview, isFirstChunk:", firstChunk, "PromptId:", promptId);
                 sidebarProvider._view.webview.postMessage({
                   command: "appendResponseChunk",
                   chunk: chunkContent,
-                  isFirstChunk: firstChunk
+                  isFirstChunk: firstChunk,
+                  promptId: promptId // Include the promptId
                 });
                 firstChunk = false;
               }
@@ -704,44 +710,45 @@ async function callGenerativeApi(
           }
         }
       }
-      
+
       // Final decoding to catch any remaining text
       buffer += decoder.decode();
       console.log("[SSE Debug] Final buffer after stream completion:", buffer);
       let processedBuffer = processSSEBuffer(buffer);
       console.log("[SSE Debug] Final processing found", processedBuffer.messages.length, "messages");
-      
+
       // Process any remaining complete messages
       for (const data of processedBuffer.messages) {
         if (data === '[DONE]') {
           console.log("[SSE Debug] Skipping final [DONE] message");
           continue;
         }
-        
+
         try {
           const parsedData = JSON.parse(data);
           console.log("[SSE Debug] Parsed final message JSON");
-          
-          if (parsedData.candidates && 
-              parsedData.candidates[0] && 
-              parsedData.candidates[0].content && 
-              parsedData.candidates[0].content.parts && 
-              parsedData.candidates[0].content.parts[0] && 
+
+          if (parsedData.candidates &&
+              parsedData.candidates[0] &&
+              parsedData.candidates[0].content &&
+              parsedData.candidates[0].content.parts &&
+              parsedData.candidates[0].content.parts[0] &&
               parsedData.candidates[0].content.parts[0].text) {
-            
+
             const chunkContent = parsedData.candidates[0].content.parts[0].text;
             console.log("[SSE Debug] Final chunk content:", chunkContent);
-            
+
             // Append to the full response
             responseText += chunkContent;
-            
+
             // Send the chunk to the webview
             if (sidebarProvider && sidebarProvider._view) {
               console.log("[SSE Debug] Sending final chunk to webview");
               sidebarProvider._view.webview.postMessage({
                 command: "appendResponseChunk",
                 chunk: chunkContent,
-                isFirstChunk: firstChunk
+                isFirstChunk: firstChunk,
+                promptId: promptId // Include the promptId
               });
               firstChunk = false;
             }
@@ -769,7 +776,8 @@ async function callGenerativeApi(
         if (sidebarProvider && sidebarProvider._view) {
           sidebarProvider._view.webview.postMessage({
             command: "endResponseStream",
-            fullResponse: responseText
+            fullResponse: responseText,
+            promptId: promptId // Include the promptId
           });
         }
       } else {

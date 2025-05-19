@@ -69,7 +69,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._testFiles = testFiles.map((file) => vscode.Uri.file(file));
 
     // Load chat history
-    this._chatHistory = this._context.workspaceState.get<any[]>(
+    const savedHistory = this._context.workspaceState.get<any[]>(
       "chatHistory",
       []
     );
@@ -81,14 +81,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     );
 
     // Load chat history with type checking and migration
-    const savedHistory = this._context.workspaceState.get<any[]>(
+    const savedHistoryTyped = this._context.workspaceState.get<any[]>(
       "chatHistory",
       []
     );
 
     // Check if history is in the old format and convert if needed
-    if (savedHistory.length > 0 && !("role" in savedHistory[0])) {
-      this._chatHistory = savedHistory.map((item) => {
+    if (savedHistoryTyped.length > 0 && !("role" in savedHistoryTyped[0])) {
+      this._chatHistory = savedHistoryTyped.map((item) => {
         if (typeof item === "string") {
           return { role: "assistant", content: item };
         }
@@ -99,7 +99,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         return { role: "assistant", content: item.content };
       });
     } else {
-      this._chatHistory = savedHistory as ChatMessage[];
+      this._chatHistory = savedHistoryTyped as ChatMessage[];
     }
   }
 
@@ -166,17 +166,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           break;
 
         case "requestTestSuggestion":
+          console.log("[SidebarProvider] Received requestTestSuggestion message from webview.");
+          // Reset cancellation flag for the new request
+          this._isCurrentRequestCancelled = false;
           // Dispose any existing CTS before creating a new one
           this._cancellationTokenSource?.dispose();
           this._cancellationTokenSource = new vscode.CancellationTokenSource();
-          
+
           vscode.commands.executeCommand(
             "tdd-ai-companion.suggestTestCase",
             message.message,
-            this._cancellationTokenSource.token // Pass the token
+            this._cancellationTokenSource.token, // Pass the token
+            message.promptId // Pass the promptId
           );
+          console.log("[SidebarProvider] Executed suggestTestCaseCommand.");
           break;
         case "cancelRequest":
+          console.log("[SidebarProvider] Received cancelRequest message from webview.");
           this.cancelCurrentRequest();
           break;
         case "setupProject":
@@ -238,6 +244,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   public cancelCurrentRequest() {
+    console.log("[SidebarProvider] cancelCurrentRequest START.");
     if (this._cancellationTokenSource) {
       this._isCurrentRequestCancelled = true; // Set internal flag
       this._cancellationTokenSource.cancel();
@@ -246,21 +253,29 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       if (this._view) {
         this._view.webview.postMessage({ command: "requestCancelled" });
       }
-      console.log("Request cancellation attempted.");
+      console.log("[SidebarProvider] Request cancellation attempted.");
+    } else {
+      console.log("[SidebarProvider] No active cancellation token source to cancel.");
     }
+    console.log("[SidebarProvider] cancelCurrentRequest END.");
   }
 
   // Call this method from extension.ts after a request completes or errors out
   public finalizeRequest() {
+    console.log("[SidebarProvider] finalizeRequest START.");
     // This method is called when the request in extension.ts finishes (either success or error/abort).
     // We should dispose the CTS here if it still exists, but NOT reset the _isCurrentRequestCancelled flag.
     // The flag is reset in addResponse when a response is successfully processed, or implicitly when a new request starts.
     if (this._cancellationTokenSource) {
       this._cancellationTokenSource.dispose();
       this._cancellationTokenSource = undefined;
+      console.log("[SidebarProvider] CancellationTokenSource disposed in finalizeRequest.");
+    } else {
+       console.log("[SidebarProvider] No active CancellationTokenSource to dispose in finalizeRequest.");
     }
     // The webview UI reset is handled by receiving the 'requestCancelled' message (if cancelled)
     // or by the 'addResponse' handler (if completed).
+    console.log("[SidebarProvider] finalizeRequest END.");
   }
 
 
@@ -303,10 +318,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         files: this._testFiles.map((f) => f.fsPath),
       });
     }
-  }  public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
+  }  public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number, promptId?: string) {
     // Check if the request was cancelled internally
     if (this._isCurrentRequestCancelled || this._cancellationTokenSource === undefined) {
-        console.log("Request was cancelled internally or no active token source, not adding response.");
+        console.log("[SidebarProvider] addResponse: Request was cancelled internally or no active token source, not adding response.");
         this._isCurrentRequestCancelled = false; // Reset flag for the next request
         return; // Do not add response if cancelled or no active request
     }
@@ -325,6 +340,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       const messagePayload: any = {
         command: "addResponse",
         response,
+        promptId: promptId // Include the promptId
       };
       if (typeof responseTokenCount === 'number') {
         messagePayload.responseTokenCount = responseTokenCount;
@@ -336,10 +352,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }  }
 
   // For use with streaming responses
-  public updateLastResponse(response: string, responseTokenCount?: number, totalInputTokens?: number) {
-    // Check if the request was cancelled internally 
+  public updateLastResponse(response: string, responseTokenCount?: number, totalInputTokens?: number, promptId?: string) {
+    // Check if the request was cancelled internally
     if (this._isCurrentRequestCancelled || this._cancellationTokenSource === undefined) {
-        console.log("Request was cancelled internally or no active token source, not updating response.");
+        console.log("[SidebarProvider] updateLastResponse: Request was cancelled internally or no active token source, not updating response.");
         this._isCurrentRequestCancelled = false; // Reset flag for the next request
         return; // Do not update response if cancelled or no active request
     }
@@ -358,7 +374,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this._view.webview.postMessage({
         command: "updateResponseMetrics",
         responseTokenCount,
-        totalInputTokens
+        totalInputTokens,
+        promptId: promptId // Include the promptId
       });
     }
   }
