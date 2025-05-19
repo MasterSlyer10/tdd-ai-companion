@@ -1034,6 +1034,11 @@ body {
   transition: opacity 0.2s ease-in-out;
 }
 
+/* Class to hide actions using display: none when needed by JS */
+.message-actions.hidden-by-js {
+    display: none;
+}
+
 .user-message .message-actions {
   align-self: flex-end; /* Align actions to the right within the user message wrapper */
 }
@@ -1044,8 +1049,9 @@ body {
 }
 
 /* Hide default action buttons when in editing mode */
+/* This rule is no longer strictly needed as JS will hide the container, but keep for clarity */
 .message.editing .message-actions .message-action-button:not(.edit-action-button) {
-    display: none;
+    /* display: none; */ /* Removed direct display manipulation */
 }
 
 .message-action-button {
@@ -1055,7 +1061,7 @@ body {
   cursor: pointer;
   padding: 4px;
   border-radius: 3px;
-  display: flex;
+  display: flex; /* Ensure buttons use flex display by default */
   align-items: center;
   justify-content: center;
 }

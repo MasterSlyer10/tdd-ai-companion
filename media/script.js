@@ -76,11 +76,16 @@
 
     const messages = chatMessages.querySelectorAll('.message');
     messages.forEach(messageElement => {
+      // If the message is a user message and is being edited, do not hide the buttons
+      if (messageElement.classList.contains('user-message') && messageElement.classList.contains('editing')) {
+        return; // Skip this message, let CSS handle visibility
+      }
+
       // Target specific buttons: edit, delete, rerun, and also save/cancel in edit mode
       const buttonsToToggle = messageElement.querySelectorAll(
         '.edit-button, .delete-button, .rerun-button, .save-resend-button, .cancel-edit-button'
       );
-      
+
       buttonsToToggle.forEach(button => {
         button.style.display = hide ? 'none' : 'flex'; // 'flex' is the default display
       });
@@ -1425,50 +1430,9 @@
     chatMessages.removeChild(aiMessageElement);
     // saveChatHistory will be called after button logic or if button not added
 
-    const actionsElement = userMessageElement.querySelector('.message-actions');
-    if (actionsElement && !actionsElement.querySelector('.rerun-button')) {
-        const isCurrentlyGenerating = sendButton.dataset.state === "stop" || sendButton.dataset.state === "stopping";
-        const rerunButton = document.createElement("button");
-        rerunButton.className = "message-action-button rerun-button";
-        rerunButton.innerHTML = '<i class="codicon codicon-refresh"></i>';
-        rerunButton.title = "Re-run prompt";
-        rerunButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
-
-        rerunButton.onclick = () => {
-            // 1. Remove all messages *after* this userMessageElement
-            let nextSibling = userMessageElement.nextElementSibling;
-            while (nextSibling) {
-                const toRemove = nextSibling;
-                nextSibling = nextSibling.nextElementSibling;
-                if (chatMessages.contains(toRemove)) {
-                    chatMessages.removeChild(toRemove);
-                }
-            }
-
-            // 2. Save chat history now that subsequent messages are cleared
-            saveChatHistory();
-
-            // 3. Display loading indicator
-            const loadingElement = document.createElement("div");
-            loadingElement.className = "loading-indicator";
-            loadingElement.textContent = "Generating response..."; // Consistent with other loading texts
-            chatMessages.appendChild(loadingElement);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-
-            // 4. Send the message to the extension
-            vscode.postMessage({
-                command: "requestTestSuggestion",
-                message: promptToResend,
-            });
-
-            // 5. Remove the rerunButton itself after click
-            if (rerunButton.parentNode) {
-                rerunButton.parentNode.removeChild(rerunButton);
-            }
-        };
-        actionsElement.appendChild(rerunButton);
-    }
-    saveChatHistory(); // Save history after AI message deletion and potential button addition
+    // Removed the re-run button functionality as requested.
+    // The code block for creating and appending the rerun button has been removed.
+    saveChatHistory(); // Save history after AI message deletion
   }
 
   function handleEditUserMessage(messageElement, contentElement, originalRawContent) {
@@ -1495,12 +1459,12 @@
     });
 
     const reloadAndSaveButton = document.createElement('button');
-    reloadAndSaveButton.textContent = 'Save & Resend';
+    reloadAndSaveButton.innerHTML = '<i class="codicon codicon-save"></i>';
     reloadAndSaveButton.className = 'edit-action-button save-resend-button'; // Add a specific class
-    reloadAndSaveButton.title = 'Save changes, delete subsequent messages, resend, and refresh file tree';
+    reloadAndSaveButton.title = 'Save changes and resend';
 
     const cancelButton = document.createElement('button');
-    cancelButton.textContent = 'Cancel';
+    cancelButton.innerHTML = '<i class="codicon codicon-close"></i>';
     cancelButton.className = 'edit-action-button cancel-edit-button'; // Add a specific class
     cancelButton.title = 'Cancel editing';
 
@@ -1592,6 +1556,15 @@
 
       // 6. Restore original action buttons
       restoreOriginalActions(messageElement);
+
+      // 7. Hide edit and delete buttons for this specific message after saving
+      const actions = messageElement.querySelector('.message-actions');
+      if (actions) {
+          const editBtn = actions.querySelector('.edit-button');
+          const deleteBtn = actions.querySelector('.delete-button');
+          if (editBtn) editBtn.style.display = 'none';
+          if (deleteBtn) deleteBtn.style.display = 'none';
+      }
     };
 
     cancelButton.onclick = () => {
@@ -1622,9 +1595,10 @@
           // Remove the 'editing' class
           messageElement.classList.remove('editing');
 
-          // Do NOT explicitly set display style for original buttons here.
-          // Their visibility will be managed by updateMessageActionsVisibility
-          // which is called by setSendButtonState.
+          // Explicitly set display style for original buttons here.
+          actionsElement.querySelectorAll('.message-action-button:not(.edit-action-button)').forEach(btn => {
+              btn.style.display = 'flex';
+          });
       }
   }
 
@@ -2299,6 +2273,7 @@
         }
         break;
       case "loadChatHistory":
+        console.log("[LoadHistory] Received loadChatHistory command. History:", message.history);
         chatMessages.innerHTML = ""; // Clear existing messages
         // Reset messageIdCounter when loading history to ensure fresh IDs for the new set of messages
         // or ensure IDs are saved/loaded if they need to be persistent across sessions.
@@ -2315,6 +2290,9 @@
 
           // Scroll to bottom after all messages are added
           chatMessages.scrollTop = chatMessages.scrollHeight;
+          console.log("[LoadHistory] Chat history loaded and rendered.");
+        } else {
+            console.log("[LoadHistory] No chat history to load.");
         }
         break;
       case "loadCheckedItems":
