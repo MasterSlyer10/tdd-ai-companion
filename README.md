@@ -1,71 +1,144 @@
-# tdd-ai-companion README
+# TDD AI Companion
 
-This is the README for your extension "tdd-ai-companion". After writing up a brief description, we recommend including the following sections.
+<!-- Icon reference removed due to SVG limitations in GitHub markdown -->
+
+## Overview
+
+TDD AI Companion is a VS Code extension that assists developers with Test-Driven Development (TDD) by leveraging AI to suggest test cases, help implement code based on tests, and provide guidance throughout the TDD process.
+
+This extension uses Google's Gemini AI and RAG (Retrieval-Augmented Generation) to provide context-aware assistance tailored to your project.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **AI-Powered Test Suggestions**: Get intelligent test case suggestions based on your current codebase and feature requirements
+- **Contextual Code Generation**: Recommend implementation code that passes your tests
+- **Project Setup Assistance**: Configure your project for effective TDD
+- **RAG-Enhanced Context**: Uses Retrieval-Augmented Generation to provide more accurate and relevant suggestions
+- **Dedicated Sidebar Interface**: Access all TDD AI Companion features from a convenient sidebar
 
-For example if there is an image subfolder under your extension project workspace:
+<!-- Screenshot will be added in future releases -->
+<!-- No screenshot available yet -->
 
-\!\[feature X\]\(images/feature-x.png\)
+## Installation Instructions (VSIX)
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+Since this extension is not published to the VS Code marketplace, you'll need to install it using the VSIX file:
+
+1. **Download the VSIX file** from the project's distribution location
+2. **Install using one of these methods**:
+
+   - **Method 1: From VS Code UI**
+     - Open VS Code
+     - Go to Extensions view (Ctrl+Shift+X)
+     - Click on the "..." menu (top-right of Extensions view)
+     - Select "Install from VSIX..."
+     - Navigate to the downloaded VSIX file and select it
+   - **Method 2: Using Command Palette**
+     - Open VS Code
+     - Press Ctrl+Shift+P to open Command Palette
+     - Type "vsix" and select "Extensions: Install from VSIX..."
+     - Navigate to the downloaded VSIX file and select it
+   - **Method 3: Using Terminal**
+     - Open a terminal/command prompt
+     - Navigate to the folder containing the VSIX file
+     - Run: `code --install-extension tdd-ai-companion-0.0.1.vsix`
+
+3. **Restart VS Code** after installation (if prompted)
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+To use this extension, you'll need:
+
+1. **Google Gemini API Key**: Required for generating test suggestions and code implementations
+2. **Pinecone API Key**: Required for the RAG (Retrieval-Augmented Generation) functionality that enhances context awareness
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
 This extension contributes the following settings:
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+- `tddAICompanion.geminiApiKey`: API key for Google Gemini
+- `tddAICompanion.pineconeApiKey`: API key for Pinecone vector database
+- `tddAICompanion.userId`: Unique identifier for the user (automatically generated if not set)
+
+## Getting Started
+
+1. **Install the extension** using the VSIX file (see Installation Instructions)
+2. **Configure your API Keys**:
+   - Open VS Code Settings (Ctrl+,)
+   - Search for "TDD AI Companion"
+   - Enter your Google Gemini API key and Pinecone API key
+3. **Open a project** you want to use with TDD
+4. **Access the TDD AI Companion sidebar** from the VS Code activity bar
+5. **Setup your project**:
+   - Define the feature you're working on
+   - Select source files and test files
+   - Index your codebase for RAG if desired
+
+## How to Use
+
+### Initial Setup
+
+1. Click on the TDD AI Companion icon in the activity bar
+2. Use the "TDD AI: Setup Project" command to:
+   - Define the current feature you're working on
+   - Select source files and test files
+
+### Workflow
+
+1. **Write a test description** in the sidebar input area
+2. Click "Get Test Suggestions" or use the "TDD AI: Suggest Test Case" command
+3. Implement the suggested test in your test files
+4. Run your tests (they will fail initially)
+5. Use "TDD AI: Update Source Files" to get implementation suggestions
+6. Implement the suggested code
+7. Run tests again to verify your implementation passes
+8. Repeat the process for additional features or edge cases
+
+### Additional Commands
+
+- **TDD AI: Update Source Files**: Get suggestions for implementation code
+- **TDD AI: Update Test Files**: Get suggestions for improving your tests
+- **TDD AI: Update Current Feature**: Change the feature you're working on
+- **TDD AI: Index Codebase for RAG**: Create/update a vector index of your code
+- **TDD AI: Clear Codebase Index**: Remove the RAG index
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- This extension requires internet access to connect to Google Gemini and Pinecone services
+- Large codebases may take longer to index for RAG functionality
+- This is a development version and may contain bugs or incomplete features
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+- Initial development release
+- Core functionality for TDD workflow assistance
+- Gemini AI integration
+- RAG capabilities for contextual understanding
+- Sidebar interface for interaction
 
 ---
 
-## Following extension guidelines
+## Development
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+This extension is built using TypeScript and the VS Code Extension API.
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+### Building the Extension from Source
 
-## Working with Markdown
+If you want to build the VSIX file yourself:
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+1. Clone the repository: `git clone [repository-url]`
+2. Navigate to the project directory: `cd tdd-ai-companion`
+3. Install dependencies: `npm install`
+4. Install vsce if you don't have it: `npm install -g @vscode/vsce`
+5. Build the extension: `npm run compile`
+6. Package the extension: `vsce package`
+   - This creates a file named `tdd-ai-companion-0.0.1.vsix` in the project root
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+The generated VSIX file can then be installed using any of the methods described in the Installation Instructions section.
 
-## For more information
+### Contributing
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-**Enjoy!**
+**Enjoy your Test-Driven Development journey with AI assistance!**
