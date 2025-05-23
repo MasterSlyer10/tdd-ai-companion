@@ -49,7 +49,14 @@ Since this extension is not published to the VS Code marketplace, you'll need to
 To use this extension, you'll need:
 
 1. **Google Gemini API Key**: Required for generating test suggestions and code implementations
-2. **Pinecone API Key**: Required for the RAG (Retrieval-Augmented Generation) functionality that enhances context awareness
+   - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - You **MUST** have this key to use any AI features in the extension
+2. **Pinecone API Key**: Required for the RAG (Retrieval-Augmented Generation) functionality
+   - Sign up at [Pinecone](https://www.pinecone.io/) and create an API key
+   - Required for advanced context-aware suggestions
+   - The extension will not be able to index your codebase without this key
+
+> ⚠️ **IMPORTANT**: This extension will not function properly without these API keys. They must be added to the extension settings before use.
 
 ## Extension Settings
 
@@ -62,12 +69,20 @@ This extension contributes the following settings:
 ## Getting Started
 
 1. **Install the extension** using the VSIX file (see Installation Instructions)
-2. **Configure your API Keys**:
+2. **Configure your API Keys** (REQUIRED):
+
    - Open VS Code Settings (Ctrl+,)
    - Search for "TDD AI Companion"
-   - Enter your Google Gemini API key and Pinecone API key
+   - Enter your Google Gemini API key
+     - Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - Enter your Pinecone API key
+     - Get from [Pinecone Dashboard](https://app.pinecone.io/)
+   - Without these keys, the extension will not work properly
+
 3. **Open a project** you want to use with TDD
+
 4. **Access the TDD AI Companion sidebar** from the VS Code activity bar
+
 5. **Setup your project**:
    - Define the feature you're working on
    - Select source files and test files
