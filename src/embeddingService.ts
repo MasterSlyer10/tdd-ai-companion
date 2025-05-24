@@ -679,11 +679,7 @@ export class EmbeddingService {
       const index = this.pineconeClient.index(this.indexName);
 
       // Delete only vectors for the current project
-      await (index as any).delete({
-        filter: {
-          projectId: this.projectId,
-        },
-      });
+      await (index as any).deleteAll();
 
       this.lastIndexedProject = "";
       vscode.window.showInformationMessage(
