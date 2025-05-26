@@ -41,11 +41,19 @@ export function activate(context: vscode.ExtensionContext) {
       // Check if setup was done
       if (
         sidebarProvider.getSourceFiles().length === 0 ||
-        !sidebarProvider.getCurrentFeature()
-      ) {
-        vscode.window.showErrorMessage("Please complete the setup first.");
-        return;
+      !sidebarProvider.getCurrentFeature()
+    ) {
+      let errorMessage = "Please complete the setup first.";
+      if (sidebarProvider.getSourceFiles().length === 0 && !sidebarProvider.getCurrentFeature()) {
+        errorMessage = "Please select source files and set the feature you are working on.";
+      } else if (sidebarProvider.getSourceFiles().length === 0) {
+        errorMessage = "Please select source files first.";
+      } else if (!sidebarProvider.getCurrentFeature()) {
+        errorMessage = "Please set the feature you are working on.";
       }
+      vscode.window.showErrorMessage(errorMessage);
+      return;
+    }
 
       vscode.window.withProgress(
         {

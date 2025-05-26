@@ -991,6 +991,15 @@
     // The webview will only add tokens when it receives them from the extension.
 
     // This console.log will appear in the Webview Developer Tools console
+    // Check if a request is already in progress
+    if (activePromptId !== null) {
+        console.log("Webview: Request already in progress, cancelling current request before sending new message.");
+        vscode.postMessage({ command: "cancelRequest" });
+        // The 'requestCancelled' message handler will reset activePromptId and UI state
+        // We will proceed to send the new message immediately after sending the cancel command.
+        // This relies on the extension handling the cancellation asynchronously and not blocking the new request.
+    }
+
     console.log("Webview: Sending message to extension:", message, `Current Total Tokens (before this turn): ${currentTokenCount}`);
 
     setSendButtonState("stop"); // Change to Stop button

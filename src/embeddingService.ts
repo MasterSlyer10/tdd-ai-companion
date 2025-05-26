@@ -216,12 +216,22 @@ export class EmbeddingService {
    * Generate embedding for a text using Pinecone's inference API
    * @param text The text to embed
    * @param skipDimensionCheck If true, skip dimension checking (used during initialization)
+   * @param abortSignal Optional AbortSignal to cancel the request
    */
   private async generateEmbedding(
     text: string,
-    skipDimensionCheck: boolean = false
+    skipDimensionCheck: boolean = false,
+    abortSignal?: AbortSignal
   ): Promise<number[]> {
     try {
+      // Check for cancellation before starting
+      if (abortSignal && abortSignal.aborted) {
+        console.log("EmbeddingService: generateEmbedding cancelled before starting");
+        const abortError = new Error("Embedding generation was cancelled");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
+
       if (!this.pineconeClient) {
         throw new Error("Pinecone client not initialized");
       }
@@ -247,7 +257,8 @@ export class EmbeddingService {
       const embeddings = await this.pineconeClient.inference.embed(
         this.embeddingModel,
         [truncatedText],
-        { inputType: "passage", truncate: "END" }
+        { inputType: "passage", truncate: "END" },
+        { signal: abortSignal } // Pass the abort signal here
       );
 
       console.log(`Got embedding result:`, embeddings);
@@ -606,8 +617,8 @@ export class EmbeddingService {
         throw abortError;
       }
 
-      // Generate embedding for the query using the same method
-      const queryEmbedding = await this.generateEmbedding(query);
+      // Generate embedding for the query using the same method, passing the abortSignal
+      const queryEmbedding = await this.generateEmbedding(query, false, abortSignal);
       
       // Check for cancellation before Pinecone query
       if (abortSignal && abortSignal.aborted) {
@@ -617,7 +628,7 @@ export class EmbeddingService {
         throw abortError;
       }
 
-      // Query Pinecone
+      // Query Pinecone, passing the abortSignal
       const index = this.pineconeClient.index(this.indexName);
       const queryResult = await index.query({
         vector: queryEmbedding,
@@ -627,7 +638,7 @@ export class EmbeddingService {
           userId: this.userId,
           projectId: this.projectId, // Add project ID filter
         },
-      });
+      }, { signal: abortSignal }); // Pass the abort signal here
 
       // Final cancellation check after Pinecone query
       if (abortSignal && abortSignal.aborted) {
