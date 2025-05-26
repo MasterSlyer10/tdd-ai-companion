@@ -187,10 +187,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           break;
         case "setupProject":
           vscode.commands.executeCommand("tdd-ai-companion.setupProject");
-          break;
-        case "updateFeature":
+          break;        case "updateFeature":
           this._currentFeature = message.feature;
           this.saveState(); // Add this line to save the state
+          break;        case "promptFeature":
+          // When prompted to define a feature via UI
+          this.promptForFeature().then((success) => {
+            // If feature was defined successfully, notify the webview
+            if (success && this._view) {
+              this._view.webview.postMessage({
+                command: "featureDefined",
+                feature: this._currentFeature
+              });
+            }
+          });
           break;
         case "getWorkspaceFiles":
           this.getWorkspaceFiles();
@@ -461,6 +471,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     return fileTree;
   }
 
+  public async promptForFeature(): Promise<boolean> {
+    // Prompt the user to define a feature
+    const featureInput = await vscode.window.showInputBox({
+      prompt: "Describe the feature you want to test",
+      placeHolder: "Example: User Authentication with email validation",
+      ignoreFocusOut: true, // Keep dialog open when clicking elsewhere
+    });
+    
+    // Update feature if user provided one
+    if (featureInput && featureInput.trim()) {
+      this._currentFeature = featureInput.trim();
+      this.saveState();
+      
+      // Update UI
+      if (this._view) {
+        this._view.webview.postMessage({
+          command: "updateFeature",
+          feature: this._currentFeature,
+        });
+      }
+      return true;
+    }
+    
+    return false;
+  }
+
   private addSourceFile(file: vscode.Uri) {
     if (!this._sourceFiles.some((f) => f.fsPath === file.fsPath)) {
       this._sourceFiles.push(file);
@@ -559,7 +595,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                                 <span>Feature:</span>
                             </div>
                             <div class="feature-input-container">
-                                <input type="text" id="feature-input" placeholder="Enter feature name/description" />
+                                <input type="text" id="feature-input" placeholder="What feature do you want to test?" />
                             </div>
                         </div>
 

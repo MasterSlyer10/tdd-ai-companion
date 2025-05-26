@@ -36,14 +36,35 @@ export function activate(context: vscode.ExtensionContext) {
       console.log("[suggestTestCaseCommand] START. Received userMessage:", userMessage, "with promptId:", promptId); // Log the incoming message
       // Debug
       console.log(sidebarProvider.getCurrentFeature());
-      console.log(sidebarProvider.getSourceFiles());
-
-      // Check if setup was done
-      if (
-        sidebarProvider.getSourceFiles().length === 0 ||
-        !sidebarProvider.getCurrentFeature()
-      ) {
-        vscode.window.showErrorMessage("Please complete the setup first.");
+      console.log(sidebarProvider.getSourceFiles());      // Check if setup was done
+      if (sidebarProvider.getSourceFiles().length === 0) {
+        vscode.window.showErrorMessage("Please select source files in the setup before generating test suggestions.");
+        return;
+      }
+        // Check if feature is defined
+      if (!sidebarProvider.getCurrentFeature()) {
+        // Show a specific message about the missing feature
+        const defineFeature = "Define Feature";
+        const result = await vscode.window.showErrorMessage(
+          "No feature is currently defined. Please define a feature you want to test.", 
+          defineFeature
+        );
+        
+        // If user clicked the button to define a feature
+        if (result === defineFeature) {
+          // Use the helper method to prompt for feature
+          const featureDefined = await sidebarProvider.promptForFeature();
+          
+          // If feature was successfully defined, proceed with the original request
+          if (featureDefined) {
+            vscode.commands.executeCommand(
+              "tdd-ai-companion.suggestTestCase",
+              userMessage,
+              cancellationToken,
+              promptId
+            );
+          }
+        }
         return;
       }
 
@@ -252,6 +273,15 @@ export function activate(context: vscode.ExtensionContext) {
       }
     )
   );
+
+  // Prompt for feature command
+  const promptFeatureCommand = vscode.commands.registerCommand(
+    "tdd-ai-companion.promptFeature",
+    async () => {
+      await sidebarProvider.promptForFeature();
+    }
+  );
+  context.subscriptions.push(promptFeatureCommand);
 
   // Add command to index codebase for RAG
   const indexCodebaseCommand = vscode.commands.registerCommand(

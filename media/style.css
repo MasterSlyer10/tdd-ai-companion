@@ -1049,10 +1049,12 @@ body {
 }
 
 /* Hide default action buttons when in editing mode */
-/* This rule is no longer strictly needed as JS will hide the container, but keep for clarity */
+/* This rule was previously used for hiding buttons in edit mode, but is now handled by JS */
+/* Commenting out the entire rule to avoid empty ruleset error 
 .message.editing .message-actions .message-action-button:not(.edit-action-button) {
-    /* display: none; */ /* Removed direct display manipulation */
+    display: none;
 }
+*/
 
 .message-action-button {
   background: transparent;
@@ -1077,7 +1079,8 @@ body {
 
 /* Style for the copy button */
 .message-action-button.copy-button {
-    /* Add specific styles if needed, otherwise it will inherit from .message-action-button */
+    color: var(--vscode-descriptionForeground);
+    margin-right: 2px;
 }
 
 /* Position actions after the last line of text for user messages */
@@ -1142,11 +1145,13 @@ body {
 
 /* Specific style for the Cancel button */
 .edit-action-button.cancel-edit-button {
-    /* Inherits styles from .edit-action-button */
+    color: var(--vscode-descriptionForeground);
+    margin-left: 2px;
 }
 
 .edit-action-button.cancel-edit-button:hover {
-    /* Inherits hover styles from .edit-action-button */
+    background-color: var(--vscode-toolbar-hoverBackground);
+    color: var(--vscode-editor-foreground);
 }
 
 /* Ensure user and AI messages align correctly with the new structure */
@@ -1213,31 +1218,54 @@ body {
   100% { opacity: 1; }
 }
 
-.message-content table {
-  border-collapse: collapse;
-  margin: 0.7em 0;
-  width: 100%;
+/* Feature prompt guidance styles */
+.feature-prompt {
+  margin: 10px 0;
+  padding: 8px;
+  border-radius: 4px;
+  background-color: var(--vscode-inputValidation-infoBackground);
+  border: 1px solid var(--vscode-inputValidation-infoBorder);
+  color: var(--vscode-inputValidation-infoForeground);
+  display: flex;
+  align-items: center;
+  transition: all 0.3s ease;
 }
 
-/* Streaming indicator for active messages */
-.message.ai-message[data-streaming="true"]::after {
-  content: "●";
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  font-size: 8px;
-  color: var(--vscode-activityBarBadge-background);
-  animation: pulse 1.5s infinite ease-in-out;
+.feature-prompt-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.feature-prompt i {
+  font-size: 14px;
+}
+
+/* Feature input highlight styles */
+.feature-highlight {
+  animation: pulse 2s infinite;
+  border: 1px solid var(--button-background) !important;
+}
+
+/* Extra emphasis when feature input is required */
+#feature-input:empty, #feature-input:invalid, #feature-input.required {
+  border-color: var(--vscode-inputValidation-infoBorder);
+}
+
+/* Pulsing animated guidance arrow */
+.guidance-arrow {
+  display: inline-block;
+  margin-right: 5px;
+  color: var(--vscode-inputValidation-infoForeground);
+  animation: pulse 1.5s infinite;
 }
 
 @keyframes pulse {
-  0% { opacity: 0.3; }
-  50% { opacity: 1; }
-  100% { opacity: 0.3; }
-}
-
-.message.ai-message[data-streaming="true"] {
-  border-left: 3px solid var(--vscode-activityBarBadge-background);
+  0% { box-shadow: 0 0 0 0 rgba(0, 120, 215, 0.4); }
+  70% { box-shadow: 0 0 0 5px rgba(0, 120, 215, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 120, 215, 0); }
 }
 
 /* Thinking section styles */
@@ -1328,8 +1356,25 @@ body {
   animation: thinking-pulse 2s infinite ease-in-out;
 }
 
-@keyframes cursor-blink {
-  0% { opacity: 1; }
-  50% { opacity: 0; }
-  100% { opacity: 1; }
+/* Define Feature button */
+.define-feature-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 3px;
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  cursor: pointer;
+}
+
+.define-feature-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.define-feature-button i {
+  font-size: 12px;
 }

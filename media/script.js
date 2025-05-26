@@ -313,11 +313,47 @@
   function setupFeatureInput() {
     if (!featureInput) return;
 
-    // Initial value - set placeholder if empty
+  // Initial value - set placeholder if empty
     if (!currentFeature) {
-      featureInput.placeholder = "Enter feature name/description";
+      featureInput.placeholder = "What feature do you want to test?";      // Add feature prompt guidance UI with button
+      const featurePromptDiv = document.createElement('div');
+      featurePromptDiv.id = 'feature-prompt';
+      featurePromptDiv.classList.add('feature-prompt');
+      featurePromptDiv.innerHTML = `
+        <div class="feature-prompt-content">
+          <i class="codicon codicon-info"></i>
+          <span>Please define a feature before generating test suggestions.</span>
+          <button class="define-feature-button" title="Define feature using VS Code input">
+            <i class="codicon codicon-pencil"></i> Define Feature
+          </button>
+        </div>
+      `;
+      
+      // Add click handler for the button
+      setTimeout(() => {
+        const defineButton = featurePromptDiv.querySelector('.define-feature-button');
+        if (defineButton) {
+          defineButton.addEventListener('click', () => {
+            vscode.postMessage({ command: "promptFeature" });
+          });
+        }
+      }, 0);
+      
+      // Insert after feature input
+      if (featureInput.parentNode) {
+        if (document.getElementById('feature-prompt')) {
+          // Remove existing prompt if it's already there
+          document.getElementById('feature-prompt').remove();
+        }
+        featureInput.parentNode.insertBefore(featurePromptDiv, featureInput.nextSibling);
+      }
     } else {
       featureInput.value = currentFeature;
+      // Remove feature prompt if feature is defined
+      const existingPrompt = document.getElementById('feature-prompt');
+      if (existingPrompt) {
+        existingPrompt.remove();
+      }
     }
 
     // Handle input changes with debounce
@@ -328,6 +364,10 @@
         if (newFeature !== currentFeature) {
           currentFeature = newFeature;
           vscode.postMessage({ command: "updateFeature", feature: newFeature });
+            // Remove feature prompt if feature is now defined
+          if (newFeature) {
+            cleanupFeaturePrompt();
+          }
         }
       }, 500)
     ); // Wait 500ms after typing stops before updating
@@ -955,7 +995,6 @@
       sendChatMessage();
     }
   }
-
   function sendChatMessage() {
     // Explicitly get the element and its value again, right before sending.
     const currentChatInputElement = document.getElementById("chat-input");
@@ -963,6 +1002,12 @@
 
     if (!message) {
       return; // Don't send empty messages
+    }
+      // Check if feature is defined
+    if (!currentFeature) {
+      if (showFeaturePrompt()) {
+        return; // Don't proceed with sending the message if prompt was shown
+      }
     }
 
     // Check token limit
@@ -1021,10 +1066,16 @@
       message: message,
       promptId: promptId, // Include the prompt ID
     });
-  }
-
-  // Simple Suggest Button (Lightbulb icon)
+  }  // Simple Suggest Button (Lightbulb icon)
   function sendPredefinedSuggestion() {
+    // Check if feature is defined
+    if (!currentFeature) {
+      if (showFeaturePrompt()) {
+        return; // Don't proceed with sending the message if prompt was shown
+      }
+      return; // Additional safety check
+    }
+    
     // Send a predefined message
     const predefinedMessage =
       "Suggest a new test case for my current implementation";
@@ -1068,6 +1119,14 @@
 
   // New function for the "Suggest Test Case" button
   function sendSuggestTestCaseMessage() {
+    // Check if feature is defined
+    if (!currentFeature) {
+      if (showFeaturePrompt()) {
+        return; // Don't proceed with sending the message if prompt was shown
+      }
+      return; // Additional safety check
+    }
+  
      // Send a predefined message for suggesting a test case
     const predefinedMessage =
       "Suggest a new test case for my current implementation"; // Same message as the lightbulb for now
@@ -1619,6 +1678,59 @@
   // handleSaveUserEdit and handleCancelUserEdit are no longer needed.
   // END - New functions for message editing and deletion
 
+  // Helper function to show feature prompt
+  function showFeaturePrompt() {
+    if (featureInput) {
+      // Highlight the feature input
+      featureInput.classList.add('feature-highlight');
+      
+      // Create or update the feature prompt
+      let featurePrompt = document.getElementById('feature-prompt');
+      if (!featurePrompt) {
+        featurePrompt = document.createElement('div');
+        featurePrompt.id = 'feature-prompt';
+        featurePrompt.classList.add('feature-prompt');
+        
+        // Insert after the feature input
+        if (featureInput.parentNode) {
+          featureInput.parentNode.insertBefore(featurePrompt, featureInput.nextSibling);
+        }
+      }
+      
+      featurePrompt.innerHTML = `
+        <div class="feature-prompt-content">
+          <i class="codicon codicon-warning"></i>
+          <span>Please define a feature before generating test suggestions.</span>
+        </div>
+      `;
+      
+      // Focus on the feature input
+      featureInput.focus();
+      
+      // Remove highlight after animation completes
+      setTimeout(() => {
+        featureInput.classList.remove('feature-highlight');
+      }, 3000);
+      
+      return true; // Indicate prompt was shown
+    }
+    return false; // Indicate prompt was not shown
+  }
+
+  // Reusable function to clean up feature prompts
+  function cleanupFeaturePrompt() {
+    // Remove any feature prompt
+    const featurePrompt = document.getElementById('feature-prompt');
+    if (featurePrompt) {
+      featurePrompt.remove();
+    }
+    
+    // Remove highlight from feature input
+    if (featureInput) {
+      featureInput.classList.remove('feature-highlight');
+    }
+  }
+
   // Handle messages from the extension
   window.addEventListener("message", (event) => {
     const message = event.data;
@@ -1689,7 +1801,7 @@
             if (!tokenLimitMsg) {
                 tokenLimitMsg = document.createElement("div");
                 tokenLimitMsg.id = "token-limit-message";
-                tokenLimitMsg.style.color = "var(--vscode-errorForeground)"; // Use VS Code theme variable for error
+                tokenLimitMsg.style.color = "red";
                 tokenLimitMsg.style.padding = "5px";
                 tokenLimitMsg.textContent = `Token limit (${TOKEN_LIMIT}) reached. Please start a new chat to continue.`;
                 if (chatInput && chatInput.parentNode) {
@@ -1699,7 +1811,7 @@
                 }
             }
             if (tokenCountDisplay) {
-                 tokenCountDisplay.style.color = "var(--vscode-errorForeground)";
+                 tokenCountDisplay.style.color = "red";
             }
         }
         console.log("[Webview] addResponse: Finalizing chat turn.");
@@ -2258,6 +2370,17 @@
         addMessageToChat("AI generation failed. Please try again.", false); // Inform the user
         console.log("[Webview] Added failure message. Finalizing chat turn.");
         finalizeChatTurn(); // Reset UI state
+        break;
+
+      case "featureDefined":
+        // Handle successful feature definition from extension
+        if (message.feature && featureInput) {
+          featureInput.value = message.feature;
+          currentFeature = message.feature;
+          
+          // Remove any feature prompt/highlight
+          cleanupFeaturePrompt();
+        }
         break;
 
       case "updateCheckedItems":

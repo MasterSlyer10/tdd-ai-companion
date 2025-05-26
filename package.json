@@ -9,14 +9,10 @@
   },
   "publisher": "TDD-AI-Companion",
   "engines": {
-    "vscode": "^1.97.0"
-  },
+    "vscode": "^1.97.0"  },
   "categories": [
     "Testing",
     "Other"
-  ],
-  "activationEvents": [
-    "onView:tdd-ai-companion.sidebar"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -42,6 +38,10 @@
         "title": "TDD AI: Update Current Feature"
       },
       {
+        "command": "tdd-ai-companion.promptFeature",
+        "title": "TDD AI: Define Feature"
+      },
+      {
         "command": "tdd-ai-companion.indexCodebase",
         "title": "TDD AI: Index Codebase for RAG"
       },
@@ -58,13 +58,13 @@
           "icon": "media/icon.svg"
         }
       ]
-    },
-    "views": {
+    },    "views": {
       "tdd-ai-companion-sidebar": [
         {
           "type": "webview",
           "id": "tdd-ai-companion.sidebar",
-          "name": "TDD Assistant"
+          "name": "TDD Assistant",
+          "icon": "media/icon.svg"
         }
       ]
     },
