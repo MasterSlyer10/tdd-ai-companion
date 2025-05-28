@@ -27,6 +27,9 @@
   const sourceFilesContainer = document.getElementById("source-files");
   const testFilesContainer = document.getElementById("test-files");
 
+  // DOM Elements for source file validation
+  const fileFilterInputContainer = document.querySelector('.tree-filter'); // Assuming the input is wrapped in .tree-filter
+
   const chatInput = document.getElementById("chat-input");
   const sendButton = document.getElementById("send-button");
   const suggestTestButton = document.getElementById("suggest-test-button");
@@ -315,45 +318,9 @@
 
   // Initial value - set placeholder if empty
     if (!currentFeature) {
-      featureInput.placeholder = "What feature do you want to test?";      // Add feature prompt guidance UI with button
-      const featurePromptDiv = document.createElement('div');
-      featurePromptDiv.id = 'feature-prompt';
-      featurePromptDiv.classList.add('feature-prompt');
-      featurePromptDiv.innerHTML = `
-        <div class="feature-prompt-content">
-          <i class="codicon codicon-info"></i>
-          <span>Please define a feature before generating test suggestions.</span>
-          <button class="define-feature-button" title="Define feature using VS Code input">
-            <i class="codicon codicon-pencil"></i> Define Feature
-          </button>
-        </div>
-      `;
-      
-      // Add click handler for the button
-      setTimeout(() => {
-        const defineButton = featurePromptDiv.querySelector('.define-feature-button');
-        if (defineButton) {
-          defineButton.addEventListener('click', () => {
-            vscode.postMessage({ command: "promptFeature" });
-          });
-        }
-      }, 0);
-      
-      // Insert after feature input
-      if (featureInput.parentNode) {
-        if (document.getElementById('feature-prompt')) {
-          // Remove existing prompt if it's already there
-          document.getElementById('feature-prompt').remove();
-        }
-        featureInput.parentNode.insertBefore(featurePromptDiv, featureInput.nextSibling);
-      }
+      featureInput.placeholder = "What feature do you want to test?";
     } else {
       featureInput.value = currentFeature;
-      // Remove feature prompt if feature is defined
-      const existingPrompt = document.getElementById('feature-prompt');
-      if (existingPrompt) {
-        existingPrompt.remove();
-      }
     }
 
     // Handle input changes with debounce
@@ -364,26 +331,43 @@
         if (newFeature !== currentFeature) {
           currentFeature = newFeature;
           vscode.postMessage({ command: "updateFeature", feature: newFeature });
-            // Remove feature prompt if feature is now defined
+          // Apply/remove validation styling based on feature presence
           if (newFeature) {
-            cleanupFeaturePrompt();
+            cleanupFeatureValidation(); // New function to remove validation
+          } else {
+            showFeatureValidation(); // New function to show validation
           }
         }
       }, 500)
     ); // Wait 500ms after typing stops before updating
   }
 
-  // Useless
-  function promptForFeature() {
-    const currentValue = currentFeature || "";
-    const feature = prompt(
-      "Enter the feature you are working on:",
-      currentValue
-    );
+  // Helper function to show source code validation
+  function showSourceCodeValidation() {
+    const wrapper = document.querySelector('.source-input-wrapper');
+    const icon = document.getElementById('source-error-icon');
+    const input = document.getElementById('file-filter');
 
-    if (feature !== null) {
-      updateFeature(feature);
-      vscode.postMessage({ command: "updateFeature", feature });
+    if (wrapper && icon && input) {
+      wrapper.classList.add('source-input-error-border');
+      icon.style.display = 'inline';
+      input.placeholder = "Please select at least one source file.";
+      input.focus();
+      return true;
+    }
+    return false;
+  }
+
+  // Helper function to clean up source code validation
+  function cleanupSourceCodeValidation() {
+    const wrapper = document.querySelector('.source-input-wrapper');
+    const icon = document.getElementById('source-error-icon');
+    const input = document.getElementById('file-filter'); // Get the input element
+
+    if (wrapper && icon && input) {
+      wrapper.classList.remove('source-input-error-border');
+      icon.style.display = 'none';
+      input.placeholder = "Filter files..."; // Restore original placeholder
     }
   }
 
@@ -1003,11 +987,24 @@
     if (!message) {
       return; // Don't send empty messages
     }
-      // Check if feature is defined
+    let hasValidationError = false;
+
+    // Check if feature is defined
     if (!currentFeature) {
-      if (showFeaturePrompt()) {
-        return; // Don't proceed with sending the message if prompt was shown
+      if (showFeatureValidation()) {
+        hasValidationError = true;
       }
+    }
+
+    // Check if source files are selected
+    if (sourceFiles.length === 0) {
+      if (showSourceCodeValidation()) {
+        hasValidationError = true;
+      }
+    }
+
+    if (hasValidationError) {
+      return; // Don't proceed with sending the message if any validation was shown
     }
 
     // Check token limit
@@ -1068,12 +1065,24 @@
     });
   }  // Simple Suggest Button (Lightbulb icon)
   function sendPredefinedSuggestion() {
+    let hasValidationError = false;
+
     // Check if feature is defined
     if (!currentFeature) {
-      if (showFeaturePrompt()) {
-        return; // Don't proceed with sending the message if prompt was shown
+      if (showFeatureValidation()) {
+        hasValidationError = true;
       }
-      return; // Additional safety check
+    }
+
+    // Check if source files are selected
+    if (sourceFiles.length === 0) {
+      if (showSourceCodeValidation()) {
+        hasValidationError = true;
+      }
+    }
+
+    if (hasValidationError) {
+      return; // Don't proceed if any validation was shown
     }
     
     // Send a predefined message
@@ -1119,12 +1128,24 @@
 
   // New function for the "Suggest Test Case" button
   function sendSuggestTestCaseMessage() {
+    let hasValidationError = false;
+
     // Check if feature is defined
     if (!currentFeature) {
-      if (showFeaturePrompt()) {
-        return; // Don't proceed with sending the message if prompt was shown
+      if (showFeatureValidation()) {
+        hasValidationError = true;
       }
-      return; // Additional safety check
+    }
+
+    // Check if source files are selected
+    if (sourceFiles.length === 0) {
+      if (showSourceCodeValidation()) {
+        hasValidationError = true;
+      }
+    }
+
+    if (hasValidationError) {
+      return; // Don't proceed if any validation was shown
     }
   
      // Send a predefined message for suggesting a test case
@@ -1678,56 +1699,44 @@
   // handleSaveUserEdit and handleCancelUserEdit are no longer needed.
   // END - New functions for message editing and deletion
 
-  // Helper function to show feature prompt
-  function showFeaturePrompt() {
-    if (featureInput) {
-      // Highlight the feature input
-      featureInput.classList.add('feature-highlight');
-      
-      // Create or update the feature prompt
-      let featurePrompt = document.getElementById('feature-prompt');
-      if (!featurePrompt) {
-        featurePrompt = document.createElement('div');
-        featurePrompt.id = 'feature-prompt';
-        featurePrompt.classList.add('feature-prompt');
-        
-        // Insert after the feature input
-        if (featureInput.parentNode) {
-          featureInput.parentNode.insertBefore(featurePrompt, featureInput.nextSibling);
-        }
-      }
-      
-      featurePrompt.innerHTML = `
-        <div class="feature-prompt-content">
-          <i class="codicon codicon-warning"></i>
-          <span>Please define a feature before generating test suggestions.</span>
-        </div>
-      `;
-      
-      // Focus on the feature input
-      featureInput.focus();
-      
-      // Remove highlight after animation completes
-      setTimeout(() => {
-        featureInput.classList.remove('feature-highlight');
-      }, 3000);
-      
-      return true; // Indicate prompt was shown
+  // Helper function to show feature validation
+  function showFeatureValidation() {
+    const wrapper = document.querySelector(".feature-input-wrapper");
+    if (wrapper) {
+      wrapper.classList.add("feature-input-error-border");
     }
-    return false; // Indicate prompt was not shown
+    if (featureInput) {
+      featureInput.classList.add('feature-input-error');
+      featureInput.placeholder = "Please define a feature you'd like to test.";
+
+      let errorIcon = document.getElementById('feature-error-icon');
+      if (!errorIcon) {
+        errorIcon = document.createElement('i');
+        errorIcon.id = 'feature-error-icon';
+        errorIcon.className = 'codicon codicon-warning';
+        // Insert the icon before the feature input
+        featureInput.parentNode.appendChild(errorIcon);
+      }
+      featureInput.focus();
+      return true; // Indicate validation was shown
+    }
+    return false; // Indicate validation was not shown
   }
 
-  // Reusable function to clean up feature prompts
-  function cleanupFeaturePrompt() {
-    // Remove any feature prompt
-    const featurePrompt = document.getElementById('feature-prompt');
-    if (featurePrompt) {
-      featurePrompt.remove();
+  // Helper function to clean up feature validation
+  function cleanupFeatureValidation() {
+    const wrapper = document.querySelector(".feature-input-wrapper");
+    if (wrapper) {
+      wrapper.classList.remove("feature-input-error-border");
     }
-    
-    // Remove highlight from feature input
     if (featureInput) {
-      featureInput.classList.remove('feature-highlight');
+      featureInput.classList.remove('feature-input-error');
+      featureInput.placeholder = "What feature do you want to test?"; // Restore original placeholder
+
+      const errorIcon = document.getElementById('feature-error-icon');
+      if (errorIcon) {
+        errorIcon.remove();
+      }
     }
   }
 
@@ -1745,6 +1754,15 @@
         sourceFiles = message.files || [];
         updateSourceFilesDisplay();
         renderFileTree(); // Re-render to show selection
+        // Apply/remove validation styling based on source files presence
+        if (sourceFiles.length > 0) {
+          cleanupSourceCodeValidation();
+        } else {
+          // Only show validation if there are no source files AND the feature is defined
+          // to avoid double validation on initial load if both are empty.
+          // The primary trigger for source file validation is sending a message.
+          // This ensures the error is cleared when files are selected.
+        }
         break;
 
       case "updateTestFiles":
@@ -1755,7 +1773,14 @@
 
       case "updateFeature":
         updateFeature(message.feature);
+        // Apply/remove validation styling based on feature presence
+        if (message.feature) {
+          cleanupFeatureValidation();
+        } else {
+          showFeatureValidation();
+        }
         break;
+
 
       case "addResponse":
         // This command is likely deprecated with streaming, but keep for safety.

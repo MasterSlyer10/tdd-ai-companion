@@ -536,17 +536,6 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
-.tree-filter input {
-  width: 100%;
-  padding: 4px 8px;
-  font-size: 12px;
-  border: 1px solid var(--input-border);
-  border-radius: 3px;
-  background-color: var(--input-background);
-  color: var(--input-foreground);
-  box-sizing: border-box;
-}
-
 .tree-view {
   flex: 1;
   overflow-y: auto;
@@ -751,6 +740,10 @@ body {
 
 #feature-input::placeholder {
   color: var(--vscode-input-placeholderForeground);
+}
+
+input.feature-input-error::placeholder {
+  color: red !important; /* Make placeholder red when in error state */
 }
 
 /* Action buttons */
@@ -1356,25 +1349,97 @@ body {
   animation: thinking-pulse 2s infinite ease-in-out;
 }
 
-/* Define Feature button */
-.define-feature-button {
-  display: inline-flex;
+/* New styles for feature input validation */
+.feature-input-wrapper {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  margin-left: 10px;
-  padding: 2px 8px;
-  font-size: 12px;
-  border-radius: 3px;
-  background-color: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
+  gap: 5px; /* Space between icon and input */
+  flex: 1; /* Allow wrapper to take available space */
+  border: 1px solid var(--vscode-input-border); /* Default border */
+  border-radius: 2px;
+  background-color: var(--vscode-input-background);
+}
+
+.feature-input-wrapper #feature-input {
+  border: none; /* Remove individual input border */
+  background-color: transparent; /* Make input background transparent */
+  flex-grow: 1; /* Allow input to fill remaining space */
+}
+
+.feature-input-wrapper.feature-input-error {
+  border-color: red !important; /* Red border for error */
+}
+
+#feature-error-icon {
+  color: red; /* Red color for icon */
+  font-size: 16px;
+  margin-right: 8px; /* Space to the left of the icon */
+  flex-shrink: 0; /* Prevent icon from shrinking */
+}
+
+.source-input-wrapper {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  border-radius: 2px;
+  background-color: var(--vscode-input-background); /* Use input background */
+}
+
+.source-input-error-border {
+  border-color: red !important;
+}
+
+.source-input-wrapper input {
+  flex: 1;
   border: none;
-  cursor: pointer;
-}
-
-.define-feature-button:hover {
-  background-color: var(--vscode-button-hoverBackground);
-}
-
-.define-feature-button i {
+  outline: none;
   font-size: 12px;
+  background: transparent;
+  color: var(--vscode-input-foreground); /* Ensure text color is correct */
+}
+
+.source-input-wrapper input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.source-input-error-border input::placeholder {
+  color: red !important;
+}
+
+#source-error-icon {
+  color: red;
+  font-size: 16px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  display: none; /* Only show on error */
+}
+
+.feature-input-error-border {
+    border: 1px solid red !important;
+}
+
+.feature-input-error {
+    border: none;
+    outline: none;
+    color: red;
+}
+
+.source-warning-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px; /* Slightly smaller text */
+  color: var(--text-secondary); /* Gray text */
+  padding: 6px 8px; /* Padding */
+  margin-top: 6px; /* Space from the input wrapper */
+  background-color: var(--vscode-inputValidation-infoBackground); /* Tooltip-like background */
+  border: 1px solid var(--vscode-inputValidation-infoBorder); /* Tooltip-like border */
+  border-radius: 3px; /* Slightly rounded corners */
+  line-height: 1.4;
+}
+
+.source-warning-message .codicon {
+  font-size: 14px; /* Adjust icon size */
+  flex-shrink: 0; /* Prevent icon from shrinking */
 }

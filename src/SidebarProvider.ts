@@ -12,7 +12,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   public _view?: vscode.WebviewView;
   private _currentFeature: string = "";
   private _sourceFiles: vscode.Uri[] = [];
-  private _testFiles: vscode.Uri[] = [];
 
   private _context: vscode.ExtensionContext;
   private _ragService: RAGService;
@@ -61,12 +60,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     );
     this._sourceFiles = sourceFiles.map((file) => vscode.Uri.file(file));
 
-    // Load test files
-    const testFiles = this._context.workspaceState.get<string[]>(
-      "testFiles",
-      []
-    );
-    this._testFiles = testFiles.map((file) => vscode.Uri.file(file));
 
     // Load chat history
     const savedHistory = this._context.workspaceState.get<any[]>(
@@ -113,11 +106,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this._sourceFiles.map((file) => file.fsPath)
     );
 
-    // Save test files
-    this._context.workspaceState.update(
-      "testFiles",
-      this._testFiles.map((file) => file.fsPath)
-    );
   }
 
   public resolveWebviewView(
@@ -136,14 +124,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     // Send initial state to the webview
     this.postSourceFilesUpdate();
-    this.postTestFilesUpdate();
 
     // Handle messages from the webview
     webviewView.webview.onDidReceiveMessage((message) => {
       switch (message.command) {
         case "webviewReady":
           this.postSourceFilesUpdate();
-          this.postTestFilesUpdate();
           if (this._currentFeature) {
             webviewView.webview.postMessage({
               command: "updateFeature",
@@ -210,12 +196,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           break;
         case "deselectSourceFile":
           this.removeSourceFile(vscode.Uri.file(message.path));
-          break;
-        case "selectTestFile":
-          this.addTestFile(vscode.Uri.file(message.path));
-          break;
-        case "deselectTestFile":
-          this.removeTestFile(vscode.Uri.file(message.path));
           break;
         case "openFile":
           vscode.workspace
@@ -295,11 +275,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.saveState();
   }
 
-  public updateTestFiles(files: vscode.Uri[]) {
-    this._testFiles = files;
-    this.postTestFilesUpdate();
-    this.saveState();
-  }
 
   public updateFeature(feature: string) {
     this._currentFeature = feature;
@@ -321,14 +296,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private postTestFilesUpdate() {
-    if (this._view) {
-      this._view.webview.postMessage({
-        command: "updateTestFiles",
-        files: this._testFiles.map((f) => f.fsPath),
-      });
-    }
-  }  public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number, promptId?: string) {
+  public addResponse(response: string, responseTokenCount?: number, totalInputTokens?: number, promptId?: string) {
     // Check if the request was cancelled internally
     if (this._isCurrentRequestCancelled || this._cancellationTokenSource === undefined) {
         console.log("[SidebarProvider] addResponse: Request was cancelled internally or no active token source, not adding response.");
@@ -394,9 +362,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     return this._sourceFiles;
   }
 
-  public getTestFiles(): vscode.Uri[] {
-    return this._testFiles;
-  }
 
   public getCurrentFeature(): string {
     return this._currentFeature;
@@ -527,19 +492,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.saveState();
   }
 
-  private addTestFile(file: vscode.Uri) {
-    if (!this._testFiles.some((f) => f.fsPath === file.fsPath)) {
-      this._testFiles.push(file);
-      this.postTestFilesUpdate();
-      this.saveState();
-    }
-  }
 
-  private removeTestFile(file: vscode.Uri) {
-    this._testFiles = this._testFiles.filter((f) => f.fsPath !== file.fsPath);
-    this.postTestFilesUpdate();
-    this.saveState();
-  }
 
   private _getHtmlForWebview(webview: vscode.Webview): string {
     const styleUri = webview.asWebviewUri(
@@ -594,7 +547,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                                 <i class="codicon codicon-symbol-event"></i>
                                 <span>Feature:</span>
                             </div>
-                            <div class="feature-input-container">
+                            <div class="feature-input-wrapper">
                                 <input type="text" id="feature-input" placeholder="What feature do you want to test?" />
                             </div>
                         </div>
@@ -610,7 +563,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                                 </div>
                             </div>
                             <div class="tree-filter">
-                                <input type="text" id="file-filter" placeholder="Filter files...">
+                                <div class="source-input-wrapper">
+                                    <input type="text" id="file-filter" placeholder="Filter files...">
+                                    <i id="source-error-icon" class="codicon codicon-warning"></i>
+                                </div>
+                                <div class="source-warning-message">
+                                    <i class="codicon codicon-warning"></i>
+                                    <span>For best results, please select only the files related to your question. Sending too many files may reduce accuracy and slow down responses.</span>
+                                </div>
                             </div>
                             <div id="file-tree" class="tree-view"></div>
                         </div>
@@ -624,12 +584,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                                 <div id="source-files" class="chip-container">None selected</div>
                             </div>
                             
-                            <!--
-                            <div class="selection-section">
-                                <h4><i class="codicon codicon-beaker"></i> Test Files</h4>
-                                <div id="test-files" class="chip-container">None selected</div>
-                            </div>
-                            -->
                         </div>
                     </div>
                 </section>

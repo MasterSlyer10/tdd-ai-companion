@@ -125,7 +125,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
             
             const testContent = await readFilesContent(
-              sidebarProvider.getTestFiles()
+              sidebarProvider.getSourceFiles()
             );
             
             // Check for cancellation after getting test content
@@ -249,7 +249,7 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         if (files) {
-          sidebarProvider.updateTestFiles(files);
+          sidebarProvider.updateSourceFiles(files);
         }
       }
     )
@@ -345,7 +345,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Get the source and test files selected by the user
       const sourceFiles = sidebarProvider.getSourceFiles();
-      const testFiles = sidebarProvider.getTestFiles();
+      const testFiles = sidebarProvider.getSourceFiles();
 
       // Combine the files for indexing
       const filesToIndex = [...sourceFiles, ...testFiles];
