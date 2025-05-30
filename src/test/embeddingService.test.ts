@@ -154,7 +154,7 @@ suite("EmbeddingService Test Suite", () => {
     ];
 
     // Store the chunks
-    await embeddingService.storeCodeChunks(testChunks);
+    await embeddingService.storeCodeChunks(testChunks, "test_code");
 
     // Verify that upsert was called with the correct data
     const mockIndex = mockPineconeClient.index();
@@ -218,7 +218,7 @@ suite("EmbeddingService Test Suite", () => {
     await embeddingService.initialize();
 
     // Query similar chunks
-    const results = await embeddingService.querySimilarChunks("test query");
+    const results = await embeddingService.querySimilarChunks("test query", 5, "source_code");
 
     // Verify results
     assert.strictEqual(results.length, 1);

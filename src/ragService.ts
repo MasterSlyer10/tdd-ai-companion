@@ -41,30 +41,78 @@ export class RAGService {
         `Starting to index ${files.length} files...`
       );
 
-      // Parse code files into function-level chunks
-      const chunks = await parseFilesIntoChunks(files);
+      const sourceFiles: vscode.Uri[] = [];
+      const testFiles: vscode.Uri[] = [];
 
-      if (chunks.length === 0) {
-        vscode.window.showWarningMessage(
-          "No code chunks were found in the selected files."
+      files.forEach((file) => {
+        const relativePath = this.getRelativePath(file.fsPath);
+        if (
+          relativePath.includes("/test/") ||
+          relativePath.endsWith(".test.ts") ||
+          relativePath.endsWith(".spec.ts") ||
+          relativePath.endsWith(".test.js") ||
+          relativePath.endsWith(".spec.js")
+        ) {
+          testFiles.push(file);
+        } else {
+          sourceFiles.push(file);
+        }
+      });
+
+      let success = true;
+
+      if (sourceFiles.length > 0) {
+        vscode.window.showInformationMessage(
+          `Parsing ${sourceFiles.length} source files...`
         );
-        this.isIndexing = false;
-        return false;
+        const sourceChunks = await parseFilesIntoChunks(sourceFiles);
+        if (sourceChunks.length > 0) {
+          vscode.window.showInformationMessage(
+            `Storing ${sourceChunks.length} source code embeddings...`
+          );
+          await this.embeddingService.storeCodeChunks(
+            sourceChunks,
+            "source_code"
+          );
+        } else {
+          vscode.window.showWarningMessage(
+            "No source code chunks were found in the selected files."
+          );
+          success = false;
+        }
       }
 
-      vscode.window.showInformationMessage(
-        `Parsed ${files.length} files into ${chunks.length} code chunks. Starting to store embeddings...`
-      );
+      if (testFiles.length > 0) {
+        vscode.window.showInformationMessage(
+          `Parsing ${testFiles.length} test files...`
+        );
+        const testChunks = await parseFilesIntoChunks(testFiles);
+        if (testChunks.length > 0) {
+          vscode.window.showInformationMessage(
+            `Storing ${testChunks.length} test code embeddings...`
+          );
+          await this.embeddingService.storeCodeChunks(testChunks, "test_code");
+        } else {
+          vscode.window.showWarningMessage(
+            "No test code chunks were found in the selected files."
+          );
+          success = false;
+        }
+      }
 
-      // Store the chunks in the vector database
-      await this.embeddingService.storeCodeChunks(chunks);
-
-      vscode.window.showInformationMessage(
-        `Successfully indexed ${chunks.length} code chunks from ${files.length} files.`
-      );
+      if (sourceFiles.length === 0 && testFiles.length === 0) {
+        vscode.window.showWarningMessage(
+          "No code files were found in the selected files."
+        );
+        success = false;
+      } else if (success) {
+        vscode.window.showInformationMessage(
+          `Successfully indexed all relevant code chunks.`
+        );
+      }
 
       this.isIndexing = false;
-      return true;
+      return success;
     } catch (error) {
       console.error("Error indexing project files:", error);
       vscode.window.showErrorMessage(
@@ -82,7 +130,8 @@ export class RAGService {
    */
   public async clearIndex(): Promise<boolean> {
     try {
-      await this.embeddingService.clearWorkspaceEmbeddings();
+      // Clear both source_code and test_code namespaces
+      await this.embeddingService.clearWorkspaceEmbeddings(); // This method clears all, so no need to specify namespace
       return true;
     } catch (error) {
       console.error("Error clearing index:", error);
@@ -92,33 +141,49 @@ export class RAGService {
   }
 
   /**
-   * Retrieve relevant code chunks for a given query
+   * Retrieve relevant code chunks for a given query from both source and test namespaces
    */
   public async retrieveRelevantCode(
     query: string,
     maxResults: number = 15,
     abortSignal?: AbortSignal
-  ): Promise<CodeChunk[]> {
+  ): Promise<{ sourceCode: CodeChunk[]; testCode: CodeChunk[] }> {
     try {
       // Check for cancellation before starting
       if (abortSignal && abortSignal.aborted) {
         console.log("RAGService: Retrieval cancelled before starting");
-        return [];
+        return { sourceCode: [], testCode: [] };
       }
-      
-      return await this.embeddingService.querySimilarChunks(query, maxResults, abortSignal);
+
+      // Retrieve source code snippets
+      const sourceCode = await this.embeddingService.querySimilarChunks(
+        query,
+        maxResults,
+        "source_code",
+        abortSignal
+      );
+
+      // Retrieve test code snippets
+      const testCode = await this.embeddingService.querySimilarChunks(
+        query,
+        maxResults,
+        "test_code",
+        abortSignal
+      );
+
+      return { sourceCode, testCode };
     } catch (error) {
       // Check if this was an abort error
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (error instanceof Error && error.name === "AbortError") {
         console.log("RAGService: Retrieval was cancelled");
-        return [];
+        return { sourceCode: [], testCode: [] };
       }
-      
+
       console.error("Error retrieving relevant code:", error);
       vscode.window.showErrorMessage(
         `Failed to retrieve relevant code: ${error}`
       );
-      return [];
+      return { sourceCode: [], testCode: [] };
     }
   }
 
@@ -128,145 +193,128 @@ export class RAGService {
   public augmentPromptWithCodeContext(
     originalPrompt: string,
     feature: string,
-    relevantChunks: CodeChunk[]
+    sourceCodeChunks: CodeChunk[],
+    testCodeChunks: CodeChunk[]
   ): string {
-    if (relevantChunks.length === 0) {
-      return originalPrompt;
-    }
+    // Helper to format chunks into a structured JSON
+    const formatChunksToJson = (chunks: CodeChunk[]) => {
+      const codebaseJson: any = {
+        codebase_structure: {},
+        headers: {},
+        code: {},
+      };
 
-    // Create a structured JSON representation
-    const codebaseJson: any = {
-      codebase_structure: {},
-      headers: {},
-      code: {},
+      chunks.forEach((chunk) => {
+        const filePath = chunk.filePath;
+        const relativePath = this.getRelativePath(filePath);
+        const parts = relativePath.split(/[\/\\]/); // Split by / or \
+
+        // Skip the file part (last part) to get the directory
+        const dirPath = parts.slice(0, -1);
+        const fileName = parts[parts.length - 1];
+
+        // Create the path and add the file
+        let currentObj = codebaseJson.codebase_structure;
+        for (const part of dirPath) {
+          if (!part) continue; // Skip empty parts
+          if (!currentObj[part]) {
+            currentObj[part] = {};
+          }
+          currentObj = currentObj[part];
+        }
+
+        // Add the file
+        if (fileName) {
+          currentObj[fileName] = "";
+        }
+
+        // Track file relationships (simplified for now)
+        // if (!filePathMap.has(relativePath)) {
+        //   filePathMap.set(relativePath, new Set<string>());
+        // }
+
+        // Initialize the file in headers if needed
+        if (!codebaseJson.headers[fileName]) {
+          codebaseJson.headers[fileName] = {
+            functions: [],
+            classes: {},
+          };
+        }
+
+        // Add function or method
+        if (chunk.type === "function") {
+          if (!codebaseJson.headers[fileName].functions.includes(chunk.name)) {
+            codebaseJson.headers[fileName].functions.push(chunk.name);
+          }
+        } else if (chunk.type === "method") {
+          // Parse class name and method name
+          const nameParts = chunk.name.split(".");
+          if (nameParts.length === 2) {
+            const className = nameParts[0];
+            const methodName = nameParts[1];
+
+            if (!codebaseJson.headers[fileName].classes[className]) {
+              codebaseJson.headers[fileName].classes[className] = {
+                methods: [],
+                relationships: [],
+              };
+            }
+
+            if (
+              !codebaseJson.headers[fileName].classes[className].methods.includes(
+                methodName
+              )
+            ) {
+              codebaseJson.headers[fileName].classes[className].methods.push(
+                methodName
+              );
+            }
+          }
+        }
+
+        // Extract code snippets
+        if (!codebaseJson.code[fileName]) {
+          codebaseJson.code[fileName] = {};
+        }
+        codebaseJson.code[fileName][chunk.name] = chunk.content;
+      });
+      return JSON.stringify(codebaseJson, null, 2);
     };
 
-    // Extract file paths and organize them into a directory structure
-    const filePathMap = new Map<string, Set<string>>();
-    relevantChunks.forEach((chunk) => {
-      const filePath = chunk.filePath;
-      const relativePath = this.getRelativePath(filePath);
-      const parts = relativePath.split(/[\/\\]/); // Split by / or \
-
-      // Skip the file part (last part) to get the directory
-      const dirPath = parts.slice(0, -1);
-      const fileName = parts[parts.length - 1];
-
-      // Create the path and add the file
-      let currentObj = codebaseJson.codebase_structure;
-      for (const part of dirPath) {
-        if (!part) continue; // Skip empty parts
-        if (!currentObj[part]) {
-          currentObj[part] = {};
-        }
-        currentObj = currentObj[part];
-      }
-
-      // Add the file
-      if (fileName) {
-        currentObj[fileName] = "";
-      }
-
-      // Track file relationships
-      if (!filePathMap.has(relativePath)) {
-        filePathMap.set(relativePath, new Set<string>());
-      }
-    });
-
-    // Extract headers (relationships between files)
-    relevantChunks.forEach((chunk) => {
-      const filePath = chunk.filePath;
-      const relativePath = this.getRelativePath(filePath);
-      const fileName = relativePath.split(/[\/\\]/).pop() || "";
-
-      // Initialize the file in headers if needed
-      if (!codebaseJson.headers[fileName]) {
-        codebaseJson.headers[fileName] = {
-          functions: [],
-          classes: {},
-        };
-      }
-
-      // Add function or method
-      if (chunk.type === "function") {
-        if (!codebaseJson.headers[fileName].functions.includes(chunk.name)) {
-          codebaseJson.headers[fileName].functions.push(chunk.name);
-        }
-      } else if (chunk.type === "method") {
-        // Parse class name and method name
-        const nameParts = chunk.name.split(".");
-        if (nameParts.length === 2) {
-          const className = nameParts[0];
-          const methodName = nameParts[1];
-
-          if (!codebaseJson.headers[fileName].classes[className]) {
-            codebaseJson.headers[fileName].classes[className] = {
-              methods: [],
-              relationships: [],
-            };
-          }
-
-          if (
-            !codebaseJson.headers[fileName].classes[className].methods.includes(
-              methodName
-            )
-          ) {
-            codebaseJson.headers[fileName].classes[className].methods.push(
-              methodName
-            );
-          }
-        }
-      }
-
-      // For simplicity, we'll infer relationships based on imports in the future
-      // This would require more advanced parsing
-    });
-
-    // Extract code snippets
-    relevantChunks.forEach((chunk) => {
-      const filePath = chunk.filePath;
-      const relativePath = this.getRelativePath(filePath);
-      const fileName = relativePath.split(/[\/\\]/).pop() || "";
-
-      // Initialize the file in code if needed
-      if (!codebaseJson.code[fileName]) {
-        codebaseJson.code[fileName] = {};
-      }
-
-      // Add the code snippet with function/method name as key
-      codebaseJson.code[fileName][chunk.name] = chunk.content;
-    });
+    const formattedSourceCode = formatChunksToJson(sourceCodeChunks);
+    const formattedTestCode = formatChunksToJson(testCodeChunks);
 
     // Format the final prompt with JSON
-    return `Task:
-You are a Test-Driven Development (TDD) agent. Your goal is to analyze the given code and suggest one essential test case to verify correctness, based on the user's query and the specified feature.
+    return `You are a Test-Driven Development (TDD) agent. Your goal is to analyze the given source code and suggest one essential test case to verify correctness, based on the user's query and the specified feature.
 
 Response Requirements:
-Your response must:
-
-Clearly state what needs to be tested.
-
-Explain why this test is necessary. (Focus on correctness, security, or edge cases.)
-
-Provide an example input and expected output.
+- Clearly state what needs to be tested.
+- Explain why this test is necessary (e.g., correctness, security, edge case).
+- Provide an example input and expected output.
+- Only suggest one test case per response.
+- Avoid suggesting any tests that already exist in the test code provided.
 
 Constraints:
-Only suggest one test case per response.
+- Do not include any code or JSON in your response.
+- Focus on a specific functionality or edge case, not a generic test.
+- When generating test suggestions, focus ONLY on the 'Relevant Source Code' section. The 'Relevant Test Code' section is provided for context to help you avoid suggesting duplicate tests.
 
-Focus on a specific functionality or edge case. (Avoid generic tests.)
-
-Do not include any code or JSON. Only provide a clear, structured natural language description.
-
-User Query for the Feature:
+User Query:
 ${originalPrompt}
 
 Feature being developed:
 ${feature}
 
-    Relevant codebase information:
-    \`\`\`json
-    ${JSON.stringify(codebaseJson, null, 2)}
-    \`\`\``;
+Relevant Source Code:
+\`\`\`json
+${formattedSourceCode}
+\`\`\`
+
+Relevant Test Code (for context only — do not repeat tests already written):
+\`\`\`json
+${formattedTestCode}
+\`\`\`
+`;
   }
 
   /**

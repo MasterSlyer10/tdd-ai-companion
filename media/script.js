@@ -436,22 +436,45 @@
       itemElement.appendChild(indentElement);
     }
 
-    // Add checkbox
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "tree-item-checkbox";
-    // Determine initial state based on checkedItems and descendants
-    const initialState = getCheckboxState(node);
-    checkbox.checked = initialState === 'checked';
-    checkbox.indeterminate = initialState === 'indeterminate';
+    // Add source file icon (replaces checkbox)
+    const sourceFileIcon = document.createElement("i");
+    sourceFileIcon.className = "codicon codicon-file-code tree-item-source-icon";
+    sourceFileIcon.dataset.path = node.path; // Store path for easy lookup
 
-    checkbox.addEventListener("change", (e) => {
-      e.stopPropagation();
-      handleCheckboxChange(node, checkbox.checked);
-      // Trigger upward cascade after handling the change
-      updateParentCheckboxStateInTree(itemElement);
+    // Determine initial state and apply appropriate class
+    const initialState = getCheckboxState(node);
+    if (initialState === 'checked') {
+        sourceFileIcon.classList.add('checked');
+    } else if (initialState === 'indeterminate') {
+        sourceFileIcon.classList.add('indeterminate');
+    }
+
+    sourceFileIcon.addEventListener("click", (e) => {
+        e.stopPropagation(); // Prevent parent click handlers from firing
+        // Toggle the checked state
+        const isChecked = !sourceFileIcon.classList.contains('checked');
+        handleCheckboxChange(node, isChecked, 'source'); // Pass type
+        // The renderFileTree() call in handleCheckboxChange will re-render and update the icon's state
     });
-    itemElement.appendChild(checkbox);
+    itemElement.appendChild(sourceFileIcon);
+
+    // Add test file icon
+    const testFileIcon = document.createElement("i");
+    testFileIcon.className = "codicon codicon-beaker tree-item-test-icon";
+    testFileIcon.dataset.path = node.path; // Store path for easy lookup
+
+    // Determine initial state and apply appropriate class for test file icon
+    const isTestFileChecked = testFiles.includes(node.path);
+    if (isTestFileChecked) {
+        testFileIcon.classList.add('checked');
+    }
+
+    testFileIcon.addEventListener("click", (e) => {
+        e.stopPropagation(); // Prevent parent click handlers from firing
+        const isChecked = !testFileIcon.classList.contains('checked');
+        handleCheckboxChange(node, isChecked, 'test'); // Pass type
+    });
+    itemElement.appendChild(testFileIcon);
 
     // Add expand/collapse button for directories
     if (node.type === "directory") {
@@ -475,7 +498,7 @@
       itemElement.appendChild(spacerElement);
     }
 
-    // Add icon
+    // Add folder/file icon (next to source file icon)
     const iconElement = document.createElement("i");
     iconElement.className = `codicon tree-item-icon ${
       node.type === "directory" ? "codicon-folder" : "codicon-file"
@@ -487,20 +510,6 @@
     nameElement.textContent = node.name;
     itemElement.appendChild(nameElement);
 
-    // Check if this file is selected (only files are added to sourceFiles)
-    const isSourceFile = sourceFiles.some((f) => f === node.path);
-    // const isTestFile = testFiles.some((f) => f === node.path); // Removed test files for now
-
-    if (isSourceFile) {
-      const indicator = document.createElement("i");
-
-      // Removed class
-      indicator.className = "codicon tree-item-indicator";
-      indicator.style.marginLeft = "4px";
-      indicator.style.fontSize = "12px";
-      indicator.style.color = "var(--primary-color)";
-      itemElement.appendChild(indicator);
-    }
 
     // if (isTestFile) {
     //   const indicator = document.createElement("i");
@@ -511,10 +520,10 @@
     //   itemElement.appendChild(indicator);
     // }
 
-    // Add click handlers
+    // Add click handlers for the tree item itself (excluding the source file icon)
     itemElement.addEventListener("click", (e) => {
-      // Don't trigger folder toggle or file opening when clicking the checkbox
-      if (e.target !== checkbox) {
+      // Don't trigger folder toggle or file opening when clicking the source file icon
+      if (e.target !== sourceFileIcon) {
         if (node.type === "directory") {
           toggleFolder(node.path);
         } else {
@@ -555,89 +564,137 @@
   }
 
   // Add function to handle checkbox changes
-  function handleCheckboxChange(node, isChecked) {
-    // Update checkedItems set for the clicked item
-    if (isChecked) {
-      checkedItems.add(node.path);
-    } else {
-      checkedItems.delete(node.path);
-    }
-
-    // Apply to children if it's a directory
-    if (node.type === "directory" && node.children) {
-      updateChildCheckboxes(node, isChecked);
-    }
-
-    // Handle file selection for source files (only for files or when a folder is checked/unchecked)
-    if (node.type === "file") {
-       if (isChecked) {
-        // Add to source files if not already there
-        if (!sourceFiles.includes(node.path)) {
-          vscode.postMessage({
-            command: "selectSourceFile",
-            path: node.path,
-          });
-        }
+  function handleCheckboxChange(node, isChecked, type) {
+    // For source files, update checkedItems set and send messages
+    if (type === 'source') {
+      if (isChecked) {
+        checkedItems.add(node.path);
       } else {
-        // Remove from source files
-        if (sourceFiles.includes(node.path)) {
-          vscode.postMessage({
-            command: "deselectSourceFile",
-            path: node.path,
+        checkedItems.delete(node.path);
+      }
+
+      // Apply to children if it's a directory
+      if (node.type === "directory" && node.children) {
+        updateChildCheckboxes(node, isChecked, 'source');
+      }
+
+      // Handle file selection for source files (only for files or when a folder is checked/unchecked)
+      if (node.type === "file") {
+        if (isChecked) {
+          // Add to source files if not already there
+          if (!sourceFiles.includes(node.path)) {
+            vscode.postMessage({
+              command: "selectSourceFile",
+              path: node.path,
+            });
+          }
+        } else {
+          // Remove from source files
+          if (sourceFiles.includes(node.path)) {
+            vscode.postMessage({
+              command: "deselectSourceFile",
+              path: node.path,
+            });
+          }
+        }
+      } else if (node.type === 'directory') {
+        // When a folder is checked/unchecked, update sourceFiles based on its descendant files
+        if (isChecked) {
+          // Add all descendant files to sourceFiles
+          getAllDescendantFiles(node).forEach(filePath => {
+            if (!sourceFiles.includes(filePath)) {
+              vscode.postMessage({
+                command: "selectSourceFile",
+                path: filePath,
+              });
+            }
+          });
+        } else {
+          // Remove all descendant files from sourceFiles
+          getAllDescendantFiles(node).forEach(filePath => {
+            if (sourceFiles.includes(filePath)) {
+              vscode.postMessage({
+                command: "deselectSourceFile",
+                path: filePath,
+              });
+            }
           });
         }
       }
-    } else if (node.type === 'directory') {
-        // When a folder is checked/unchecked, update sourceFiles based on its descendant files
+    } else if (type === 'test') {
+      // For test files, directly update testFiles array and send messages
+      if (node.type === "file") { // Only files can be test files
         if (isChecked) {
-            // Add all descendant files to sourceFiles
+          if (!testFiles.includes(node.path)) {
+            testFiles.push(node.path); // Directly update local array
+            vscode.postMessage({
+              command: "selectTestFile",
+              path: node.path,
+            });
+          }
+        } else {
+          if (testFiles.includes(node.path)) {
+            testFiles = testFiles.filter(f => f !== node.path); // Directly update local array
+            vscode.postMessage({
+              command: "deselectTestFile",
+              path: node.path,
+            });
+          }
+        }
+      } else if (node.type === 'directory') {
+        // When a folder is checked/unchecked, update testFiles based on its descendant files
+        if (isChecked) {
+            // Add all descendant files to testFiles
             getAllDescendantFiles(node).forEach(filePath => {
-                 if (!sourceFiles.includes(filePath)) {
+                 if (!testFiles.includes(filePath)) {
+                    testFiles.push(filePath); // Directly update local array
                     vscode.postMessage({
-                        command: "selectSourceFile",
+                        command: "selectTestFile",
                         path: filePath,
                     });
                 }
             });
         } else {
-            // Remove all descendant files from sourceFiles
+            // Remove all descendant files from testFiles
              getAllDescendantFiles(node).forEach(filePath => {
-                 if (sourceFiles.includes(filePath)) {
+                 if (testFiles.includes(filePath)) {
+                    testFiles = testFiles.filter(f => f !== filePath); // Directly update local array
                     vscode.postMessage({
-                        command: "deselectSourceFile",
+                        command: "deselectTestFile",
                         path: filePath,
                     });
                 }
             });
         }
+      }
+      // Test file selection does not affect checkedItems or parent folder states for now
     }
 
-
-    // Save checked items to state
+    // Save checked items to state (only relevant for source files currently)
     saveCheckedItemsToState();
     saveCheckedItems();
 
-    // Re-render tree to show selection (this will also update parent states)
+    // Re-render tree to show selection (this will also update parent states for source files)
     renderFileTree();
   }
 
-  // Add function to recursively update child checkboxes
-  function updateChildCheckboxes(node, isChecked) {
+  // Add function to recursively update child checkboxes (for source files)
+  function updateChildCheckboxes(node, isChecked, type) {
     if (!node.children) return;
 
     node.children.forEach((child) => {
-      if (isChecked) {
-        checkedItems.add(child.path);
-      } else {
-        checkedItems.delete(child.path);
+      if (type === 'source') {
+        if (isChecked) {
+          checkedItems.add(child.path);
+        } else {
+          checkedItems.delete(child.path);
+        }
       }
 
       // Recursively update if it's a directory
       if (child.type === "directory") {
-        updateChildCheckboxes(child, isChecked);
+        updateChildCheckboxes(child, isChecked, type);
       }
-      // Note: File selection messages are now handled in handleCheckboxChange for folders
-      // to ensure only files are added/removed from sourceFiles.
     });
   }
 
@@ -829,21 +886,6 @@
     });
     contextMenu.appendChild(sourceOption);
 
-    // Add test file option
-    const testOption = document.createElement("div");
-    testOption.className = "context-menu-item";
-    testOption.innerHTML = `<i class="codicon codicon-beaker"></i> ${
-      isTestFile ? "Remove from" : "Add to"
-    } Test Files`;
-    testOption.addEventListener("click", () => {
-      if (isTestFile) {
-        vscode.postMessage({ command: "deselectTestFile", path: filePath });
-      } else {
-        vscode.postMessage({ command: "selectTestFile", path: filePath });
-      }
-      removeContextMenu();
-    });
-    contextMenu.appendChild(testOption);
 
     // Add open file option
     const openOption = document.createElement("div");
@@ -2422,11 +2464,10 @@
             // Find the corresponding checkbox in the DOM and update its state
             const itemElement = fileTreeElement.querySelector(`.tree-item[data-path="${message.path}"]`);
             if (itemElement) {
-                const checkbox = itemElement.querySelector('.tree-item-checkbox');
-                if (checkbox) {
-                    checkbox.checked = false;
-                    checkbox.indeterminate = false;
-                    // Also update parent checkbox states
+                const sourceIcon = itemElement.querySelector('.tree-item-source-icon');
+                if (sourceIcon) {
+                    sourceIcon.classList.remove('checked', 'indeterminate');
+                    // Also update parent icon states
                     updateParentCheckboxStateInTree(itemElement);
                 }
             }
@@ -2509,11 +2550,11 @@
               const parentNode = findNodeByPath(parentPath, fileTree); // Find the corresponding node in the data
 
               if (parentNode) {
-                  const parentCheckbox = parentItemElement.querySelector('.tree-item-checkbox');
-                  if (parentCheckbox) {
+                  const parentSourceIcon = parentItemElement.querySelector('.tree-item-source-icon');
+                  if (parentSourceIcon) {
                       const parentState = getCheckboxState(parentNode);
-                      parentCheckbox.checked = parentState === 'checked';
-                      parentCheckbox.indeterminate = parentState === 'indeterminate';
+                      parentSourceIcon.classList.toggle('checked', parentState === 'checked');
+                      parentSourceIcon.classList.toggle('indeterminate', parentState === 'indeterminate');
                   }
               }
               currentElement = parentItemElement.parentElement; // Move up to the next parent's children container

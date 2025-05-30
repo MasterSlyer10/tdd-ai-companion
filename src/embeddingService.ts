@@ -343,8 +343,13 @@ export class EmbeddingService {
 
   /**
    * Store code chunks in Pinecone
+   * @param chunks The code chunks to store
+   * @param namespace The namespace to store the chunks under (e.g., "source_code", "test_code")
    */
-  public async storeCodeChunks(chunks: CodeChunk[]): Promise<void> {
+  public async storeCodeChunks(
+    chunks: CodeChunk[],
+    namespace: string
+  ): Promise<void> {
     if (!this.initialized) {
       const success = await this.initialize();
       if (!success) {
@@ -362,7 +367,9 @@ export class EmbeddingService {
         return;
       }
 
-      console.log(`Starting to index ${chunks.length} code chunks...`);
+      console.log(
+        `Starting to index ${chunks.length} code chunks in namespace '${namespace}'...`
+      );
       const index = this.pineconeClient.index(this.indexName);
 
       // Process chunks in batches to avoid rate limits
@@ -378,7 +385,9 @@ export class EmbeddingService {
         try {
           // First generate embeddings for all chunks in the batch using Pinecone's inference API
           console.log(
-            `Generating embeddings for batch ${Math.floor(i / batchSize) + 1}`
+            `Generating embeddings for batch ${
+              Math.floor(i / batchSize) + 1
+            } in namespace '${namespace}'`
           );
 
           // Map the chunks to only their text content for embedding
@@ -429,8 +438,8 @@ export class EmbeddingService {
                 }
               }
 
-              // Add user ID to the vector ID and metadata
-              const vectorId = `${this.userId}_${chunk.id}`;
+              // Add user ID and namespace to the vector ID and metadata
+              const vectorId = `${this.userId}_${namespace}_${chunk.id}`;
 
               return {
                 id: vectorId,
@@ -444,6 +453,7 @@ export class EmbeddingService {
                   name: chunk.name,
                   userId: this.userId,
                   projectId: this.projectId,
+                  namespace: namespace, // Add namespace to metadata
                 },
               };
             })
@@ -459,14 +469,16 @@ export class EmbeddingService {
           }
 
           // Store embeddings in Pinecone
-          console.log(`Upserting ${vectors.length} vectors to Pinecone`);
+          console.log(
+            `Upserting ${vectors.length} vectors to Pinecone in namespace '${namespace}'`
+          );
           await index.upsert(vectors as any[]);
 
           // Show progress
           vscode.window.showInformationMessage(
             `Stored ${i + batch.length}/${
               chunks.length
-            } code chunks in vector database`
+            } code chunks in vector database (namespace: ${namespace})`
           );
 
           // Add a small delay between batches to avoid rate limits
@@ -475,11 +487,15 @@ export class EmbeddingService {
           }
         } catch (batchError) {
           console.error(
-            `Error processing batch ${Math.floor(i / batchSize) + 1}:`,
+            `Error processing batch ${
+              Math.floor(i / batchSize) + 1
+            } for namespace '${namespace}':`,
             batchError
           );
           vscode.window.showErrorMessage(
-            `Error processing batch ${Math.floor(i / batchSize) + 1}: ${
+            `Error processing batch ${
+              Math.floor(i / batchSize) + 1
+            } for namespace '${namespace}': ${
               batchError instanceof Error
                 ? batchError.message
                 : String(batchError)
@@ -496,9 +512,10 @@ export class EmbeddingService {
   }
 
   /**
-   * Check if the current project is already indexed
+   * Check if the current project is already indexed in a specific namespace
+   * @param namespace The namespace to check (e.g., "source_code", "test_code")
    */
-  private async isProjectIndexed(): Promise<boolean> {
+  private async isProjectIndexed(namespace: string): Promise<boolean> {
     if (!this.pineconeClient) {
       throw new Error("Pinecone client not initialized");
     }
@@ -507,15 +524,16 @@ export class EmbeddingService {
       const index = this.pineconeClient.index(this.indexName);
       const stats = await index.describeIndexStats();
 
-      // Check if we have any vectors and if they belong to the current project
+      // Check if we have any vectors and if they belong to the current project and namespace
       if (stats.totalRecordCount && stats.totalRecordCount > 0) {
-        // Query for a single vector to check project ID
+        // Query for a single vector to check project ID and namespace
         const queryResult = await index.query({
           vector: new Array(this.dimension).fill(0),
           topK: 1,
           includeMetadata: true,
           filter: {
             projectId: this.projectId,
+            namespace: namespace, // Filter by namespace
           },
         });
 
@@ -529,50 +547,54 @@ export class EmbeddingService {
   }
 
   /**
-   * Automatically index the current project if needed
+   * Automatically index the current project if needed for a specific namespace
+   * @param namespace The namespace to index (e.g., "source_code", "test_code")
+   * @param files The files to index for this namespace
    */
-  private async autoIndexIfNeeded(): Promise<void> {
+  private async autoIndexIfNeeded(
+    namespace: string,
+    files: vscode.Uri[]
+  ): Promise<void> {
     if (this.isIndexing) {
       return; // Already indexing
     }
 
     try {
-      const isIndexed = await this.isProjectIndexed();
+      const isIndexed = await this.isProjectIndexed(namespace);
       if (!isIndexed) {
-        // Get all supported code files in the workspace
-        const filePattern = `**/*{${SUPPORTED_EXTENSIONS.join(",")}}`;
-        const files = await vscode.workspace.findFiles(
-          filePattern,
-          "**/node_modules/**"
-        );
-
         if (files.length > 0) {
           // Show progress notification
           vscode.window.showInformationMessage(
-            "Indexing codebase for RAG functionality... This may take a few minutes."
+            `Indexing codebase for RAG functionality (namespace: ${namespace})... This may take a few minutes.`
           );
 
           // Parse and index the files
           const chunks = await parseFilesIntoChunks(files);
           if (chunks.length > 0) {
-            await this.storeCodeChunks(chunks);
-            this.lastIndexedProject = this.projectId;
+            await this.storeCodeChunks(chunks, namespace);
+            this.lastIndexedProject = this.projectId; // This might need to be more granular if we track per-namespace indexing
           }
         }
       }
     } catch (error) {
-      console.error("Error in auto-indexing:", error);
+      console.error(`Error in auto-indexing for namespace ${namespace}:`, error);
       vscode.window.showErrorMessage(
-        "Failed to automatically index the codebase. Please try indexing manually."
+        `Failed to automatically index the codebase for namespace ${namespace}. Please try indexing manually.`
       );
     }
   }
+
   /**
-   * Query similar code chunks based on a text query
+   * Query similar code chunks based on a text query from a specific namespace
+   * @param query The text query
+   * @param topK The number of top results to retrieve
+   * @param namespace The namespace to query (e.g., "source_code", "test_code")
+   * @param abortSignal Optional AbortSignal to cancel the operation
    */
   public async querySimilarChunks(
     query: string,
     topK: number = 5,
+    namespace: string, // Add namespace parameter
     abortSignal?: AbortSignal
   ): Promise<CodeChunk[]> {
     if (!this.initialized) {
@@ -595,12 +617,14 @@ export class EmbeddingService {
         throw new Error("Pinecone client not initialized");
       }
 
-      // Check if we need to index the project
-      await this.autoIndexIfNeeded();
-      
+      // Auto-indexing logic needs to be handled by RAGService now, as it needs to differentiate files
+      // await this.autoIndexIfNeeded(namespace); // This call needs to be removed or modified
+
       // Check for cancellation before embedding generation
       if (abortSignal && abortSignal.aborted) {
-        console.log("EmbeddingService: Query cancelled before embedding generation");
+        console.log(
+          "EmbeddingService: Query cancelled before embedding generation"
+        );
         const abortError = new Error("Query was cancelled");
         abortError.name = "AbortError";
         throw abortError;
@@ -608,7 +632,7 @@ export class EmbeddingService {
 
       // Generate embedding for the query using the same method
       const queryEmbedding = await this.generateEmbedding(query);
-      
+
       // Check for cancellation before Pinecone query
       if (abortSignal && abortSignal.aborted) {
         console.log("EmbeddingService: Query cancelled before Pinecone query");
@@ -617,7 +641,7 @@ export class EmbeddingService {
         throw abortError;
       }
 
-      // Query Pinecone
+      // Query Pinecone with namespace filter
       const index = this.pineconeClient.index(this.indexName);
       const queryResult = await index.query({
         vector: queryEmbedding,
@@ -625,7 +649,8 @@ export class EmbeddingService {
         includeMetadata: true,
         filter: {
           userId: this.userId,
-          projectId: this.projectId, // Add project ID filter
+          projectId: this.projectId,
+          namespace: namespace, // Filter by namespace
         },
       });
 
@@ -638,17 +663,21 @@ export class EmbeddingService {
       }
 
       console.log(
-        `Retrieved ${queryResult.matches.length} matches from Pinecone`
+        `Retrieved ${queryResult.matches.length} matches from Pinecone for namespace '${namespace}'`
       );
 
       // Convert query results back to code chunks
       return queryResult.matches.map((match) => ({
-        id: match.id.replace(`${this.userId}_`, ""),
+        id: match.id.replace(`${this.userId}_${namespace}_`, ""), // Remove namespace from ID
         content: match.metadata?.content as string,
         filePath: match.metadata?.filePath as string,
         startLine: match.metadata?.startLine as number,
         endLine: match.metadata?.endLine as number,
-        type: match.metadata?.type as "function" | "method" | "class" | "other",
+        type: match.metadata?.type as
+          | "function"
+          | "method"
+          | "class"
+          | "other",
         name: match.metadata?.name as string,
       }));
     } catch (error) {

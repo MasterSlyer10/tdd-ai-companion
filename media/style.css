@@ -612,6 +612,12 @@ body {
   padding: 4px 0;
 }
 
+/* Ensure test files container has proper styling */
+#test-files {
+  /* Inherits most styles from .chip-container */
+  /* Add any specific overrides if needed */
+}
+
 .file-chip {
   display: flex;
   align-items: center;
@@ -661,19 +667,54 @@ body {
   background-color: var(--vscode-list-hoverBackground);
 }
 
-/* Add styles for the checkboxes */
-.tree-item-checkbox {
+/* Styles for the new source file icon */
+.tree-item-source-icon {
   margin: 0 4px 0 0;
   cursor: pointer;
-  width: 14px;
-  height: 14px;
+  font-size: 14px; /* Match the size of the old checkbox */
+  color: var(--vscode-icon-foreground); /* Default gray color */
+  opacity: 0.6; /* Slightly faded when unchecked */
+  transition: color 0.2s ease, opacity 0.2s ease;
 }
 
-/* Adjust padding for tree items to account for checkboxes */
+.tree-item-source-icon:hover {
+  opacity: 1; /* Full opacity on hover */
+}
+
+.tree-item-source-icon.checked {
+  color: var(--primary-color); /* Blue when checked */
+  opacity: 1; /* Full opacity when checked */
+}
+
+.tree-item-source-icon.indeterminate {
+  color: var(--vscode-editorInfo-foreground); /* A lighter gray/info color for indeterminate */
+  opacity: 0.8;
+}
+
+/* Styles for the new test file icon */
+.tree-item-test-icon {
+  margin: 0 4px 0 0;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--vscode-icon-foreground); /* Default gray color */
+  opacity: 0.6;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.tree-item-test-icon:hover {
+  opacity: 1;
+}
+
+.tree-item-test-icon.checked {
+  color: var(--vscode-terminal-ansiGreen); /* Green when checked */
+  opacity: 1;
+}
+
+/* Adjust padding for tree items to account for the new icon */
 .tree-item {
   display: flex;
   align-items: center;
-  padding: 2px 4px;
+  padding: 2px 4px; /* Keep consistent padding */
   cursor: pointer;
   white-space: nowrap;
   position: relative;

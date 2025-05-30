@@ -12,6 +12,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   public _view?: vscode.WebviewView;
   private _currentFeature: string = "";
   private _sourceFiles: vscode.Uri[] = [];
+  private _testFiles: vscode.Uri[] = []; // New: Test files
 
   private _context: vscode.ExtensionContext;
   private _ragService: RAGService;
@@ -60,6 +61,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     );
     this._sourceFiles = sourceFiles.map((file) => vscode.Uri.file(file));
 
+    // Load test files
+    const testFiles = this._context.workspaceState.get<string[]>(
+      "testFiles",
+      []
+    );
+    this._testFiles = testFiles.map((file) => vscode.Uri.file(file));
 
     // Load chat history
     const savedHistory = this._context.workspaceState.get<any[]>(
@@ -124,12 +131,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     // Send initial state to the webview
     this.postSourceFilesUpdate();
+    this.postTestFilesUpdate(); // Add this line
 
     // Handle messages from the webview
     webviewView.webview.onDidReceiveMessage((message) => {
       switch (message.command) {
         case "webviewReady":
           this.postSourceFilesUpdate();
+          this.postTestFilesUpdate(); // Add this line
           if (this._currentFeature) {
             webviewView.webview.postMessage({
               command: "updateFeature",
@@ -362,6 +371,40 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     return this._sourceFiles;
   }
 
+  public getTestFiles(): vscode.Uri[] {
+    return this._testFiles;
+  }
+
+  public updateTestFiles(files: vscode.Uri[]) {
+    this._testFiles = files;
+    this.postTestFilesUpdate();
+    this.saveState();
+  }
+
+  public addTestFile(file: vscode.Uri) {
+    if (!this._testFiles.some((f) => f.fsPath === file.fsPath)) {
+      this._testFiles.push(file);
+      this.postTestFilesUpdate();
+      this.saveState();
+    }
+  }
+
+  public removeTestFile(file: vscode.Uri) {
+    this._testFiles = this._testFiles.filter(
+      (f) => f.fsPath !== file.fsPath
+    );
+    this.postTestFilesUpdate();
+    this.saveState();
+  }
+
+  private postTestFilesUpdate() {
+    if (this._view) {
+      this._view.webview.postMessage({
+        command: "updateTestFiles",
+        files: this._testFiles.map((f) => f.fsPath),
+      });
+    }
+  }
 
   public getCurrentFeature(): string {
     return this._currentFeature;
@@ -580,10 +623,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                             <!-- Removed the Source Files toggle control -->
                             
                             <div class="selection-section">
-                                <h4><i class="codicon codicon-file-code"></i> Source Files</h4>
+                                <h4>Source Files</h4>
                                 <div id="source-files" class="chip-container">None selected</div>
                             </div>
                             
+                            <div class="selection-section">
+                                <h4>Test Files</h4>
+                                <div id="test-files" class="chip-container">None selected</div>
+                            </div>
                         </div>
                     </div>
                 </section>

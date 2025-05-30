@@ -113,28 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
               return;
             }
 
-            // Gather context from files
-            const sourceContent = await readFilesContent(
-              sidebarProvider.getSourceFiles()
-            );
-            
-            // Check for cancellation after getting source content
-            if (abortController.signal.aborted) {
-              console.log("[suggestTestCaseCommand] Request cancelled after fetching source content");
-              return;
-            }
-            
-            const testContent = await readFilesContent(
-              sidebarProvider.getSourceFiles()
-            );
-            
-            // Check for cancellation after getting test content
-            if (abortController.signal.aborted) {
-              console.log("[suggestTestCaseCommand] Request cancelled after fetching test content");
-              return;
-            }
-
-            // Get currently open file
+            // Get currently open file (still useful for general context, not RAG)
             let currentFileContext = "";
             const activeEditor = vscode.window.activeTextEditor;
             if (activeEditor) {
@@ -142,20 +121,14 @@ export function activate(context: vscode.ExtensionContext) {
               currentFileContext = `Currently open file: ${fileName}\n${activeEditor.document.getText()}`;
             }
 
-            // Create prompt for the LLM
-            const prompt = createTestSuggestionPrompt(
-              sourceContent,
-              testContent,
-              currentFileContext,
-              sidebarProvider.getCurrentFeature(),
-              userMessage
-            );
+            // The base prompt for the LLM is now just the user message
+            const basePrompt = userMessage;
 
             // Get conversation history
             const conversationHistory =
               sidebarProvider.getConversationHistory();
 
-            console.log("[suggestTestCaseCommand] Value of 'prompt' variable before calling callGenerativeApi:", prompt);
+            console.log("[suggestTestCaseCommand] Value of 'basePrompt' variable before calling callGenerativeApi:", basePrompt);
             console.log("[suggestTestCaseCommand] Conversation history before calling callGenerativeApi:", JSON.stringify(conversationHistory, null, 2));
 
             console.log("[suggestTestCaseCommand] Calling callGenerativeApi...");
@@ -166,7 +139,8 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // Call the Gemini API with streaming (callGenerativeApi now returns an object)
-            const { responseText, llmInputPayload } = await callGenerativeApi(prompt, conversationHistory, abortController.signal, promptId); // Pass promptId
+            // The RAG logic is now inside callGenerativeApi
+            const { responseText, llmInputPayload } = await callGenerativeApi(basePrompt, conversationHistory, abortController.signal, promptId); // Pass promptId
 
             console.log("[suggestTestCaseCommand] callGenerativeApi returned.");
             // Check if cancelled after API call completed
@@ -249,8 +223,28 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         if (files) {
-          sidebarProvider.updateSourceFiles(files);
+          sidebarProvider.updateTestFiles(files); // Corrected: call updateTestFiles
         }
+      }
+    )
+  );
+
+  // Select test file command (called from webview)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "tdd-ai-companion.selectTestFile",
+      async (filePath: string) => {
+        sidebarProvider.addTestFile(vscode.Uri.file(filePath));
+      }
+    )
+  );
+
+  // Deselect test file command (called from webview)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "tdd-ai-companion.deselectTestFile",
+      async (filePath: string) => {
+        sidebarProvider.removeTestFile(vscode.Uri.file(filePath));
       }
     )
   );
@@ -440,70 +434,6 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(clearCodebaseIndexCommand);
 }
 
-// Responsible for opening the file based on the path
-async function readFilesContent(files: vscode.Uri[]): Promise<string> {
-  let combinedContent = "";
-
-  for (const file of files) {
-    try {
-      const document = await vscode.workspace.openTextDocument(file);
-      const fileName = path.basename(file.fsPath);
-      combinedContent += `File: ${fileName}\n\n${document.getText()}\n\n`;
-
-      //Debug
-      console.log("Reading file: ", file.fsPath);
-      console.log("Content: ", document.getText());
-    } catch (error) {
-      console.error(`Error reading file ${file.fsPath}:`, error);
-    }
-  }
-
-  return combinedContent;
-}
-
-// Change ts to whatever Richter did for in finetuning
-function createTestSuggestionPrompt(
-  sourceContent: string,
-  testContent: string,
-  currentFileContext: string,
-  feature: string,
-  userMessage: string
-): string {
-  // Original Statement
-  //   `
-  // You are an expert Test-Driven Development (TDD) assistant. Your task is to SUGGEST tests for the user's code, not write them.
-
-  // Current feature being worked on: ${feature}
-
-  // USER'S SOURCE CODE:
-  // ${sourceContent}
-
-  // EXISTING TEST CODE:
-  // ${testContent}
-
-  // ${currentFileContext ? `CURRENTLY OPEN FILE:\n${currentFileContext}\n` : ""}
-
-  // User's request: ${userMessage}
-
-  // Guidelines for your response:
-  // 1. ONLY SUGGEST test cases, don't write complete test code
-  // 2. Focus on edge cases, boundary conditions, and comprehensive test coverage
-  // 3. Describe what should be tested and what assertions could be made
-  // 4. Consider the feature context and existing tests
-  // 5. Respect the existing testing style and framework
-  // 6. Suggest descriptive test names/descriptions that follow best TDD practices
-
-  // Response format:
-  // - Start with a brief analysis of the existing code and tests
-  // - List suggested test cases with clear explanations of what they test
-  // - Highlight any edge cases or potential issues to test
-  // - Suggest test case names/descriptions that follow the project's naming pattern
-  // `
-
-  // Return the user's message as the base for RAG query and initial prompt
-  return userMessage;
-}
-
 // Define interface for the API response
 interface OpenRouterResponse {
   choices: Array<{
@@ -586,15 +516,17 @@ async function callGenerativeApi(
         throw new Error("Request cancelled");
       }
       
-      if (relevantChunks.length > 0) {
-        console.log(`[RAG Components] Found ${relevantChunks.length} relevant code chunks.`);
+      if (relevantChunks.sourceCode.length > 0 || relevantChunks.testCode.length > 0) {
+        console.log(`[RAG Components] Found ${relevantChunks.sourceCode.length} source code chunks and ${relevantChunks.testCode.length} test code chunks.`);
         // Log the content of relevantChunks, stringified for better readability in console
-        console.log("[RAG Components] Embedding-derived Context (relevantChunks):", JSON.stringify(relevantChunks, null, 2));
+        console.log("[RAG Components] Embedding-derived Source Code Context:", JSON.stringify(relevantChunks.sourceCode, null, 2));
+        console.log("[RAG Components] Embedding-derived Test Code Context:", JSON.stringify(relevantChunks.testCode, null, 2));
         
         enhancedPromptContent = ragService.augmentPromptWithCodeContext(
           prompt, // Original query
           currentFeature,
-          relevantChunks
+          relevantChunks.sourceCode, // Pass source code chunks
+          relevantChunks.testCode // Pass test code chunks
         );
         console.log("[RAG Components] Instruction: is part of the structure provided by augmentPromptWithCodeContext.");
         console.log("[RAG Components] Prompt has been enhanced with RAG context.");
