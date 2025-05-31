@@ -41,7 +41,12 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage("Please select source files in the setup before generating test suggestions.");
         return;
       }
-        // Check if feature is defined
+      // Check if test files are selected
+      if (sidebarProvider.getTestFiles().length === 0) {
+        vscode.window.showErrorMessage("Please select test files in the setup before generating test suggestions.");
+        return;
+      }
+      // Check if feature is defined
       if (!sidebarProvider.getCurrentFeature()) {
         // Show a specific message about the missing feature
         const defineFeature = "Define Feature";
@@ -128,6 +133,16 @@ export function activate(context: vscode.ExtensionContext) {
             const conversationHistory =
               sidebarProvider.getConversationHistory();
 
+            // --- NEW CODE TO GATHER TDD PROMPT TEMPLATE DATA ---
+            const originalPrompt = userMessage; // The user's query is the original prompt
+            const feature = sidebarProvider.getCurrentFeature();
+            const sourceFiles = sidebarProvider.getSourceFiles();
+            const testFiles = sidebarProvider.getTestFiles();
+
+            const formattedSourceCode = await formatCodeFilesToJson(sourceFiles);
+            const formattedTestCode = await formatCodeFilesToJson(testFiles);
+            // --- END NEW CODE ---
+
             console.log("[suggestTestCaseCommand] Value of 'basePrompt' variable before calling callGenerativeApi:", basePrompt);
             console.log("[suggestTestCaseCommand] Conversation history before calling callGenerativeApi:", JSON.stringify(conversationHistory, null, 2));
 
@@ -140,7 +155,16 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Call the Gemini API with streaming (callGenerativeApi now returns an object)
             // The RAG logic is now inside callGenerativeApi
-            const { responseText, llmInputPayload } = await callGenerativeApi(basePrompt, conversationHistory, abortController.signal, promptId); // Pass promptId
+            const { responseText, llmInputPayload } = await callGenerativeApi(
+              basePrompt,
+              conversationHistory,
+              abortController.signal,
+              promptId,
+              originalPrompt, // Pass new parameters
+              feature,
+              formattedSourceCode,
+              formattedTestCode
+            ); // Pass promptId
 
             console.log("[suggestTestCaseCommand] callGenerativeApi returned.");
             // Check if cancelled after API call completed
@@ -477,7 +501,11 @@ async function callGenerativeApi(
   prompt: string, // This is the original user query from the sidebar
   conversationHistory: ChatMessage[] = [],
   abortSignal?: AbortSignal,
-  promptId?: string // Accept promptId
+  promptId?: string, // Accept promptId
+  originalPrompt?: string, // The original user query for the TDD prompt template
+  feature?: string, // The feature being developed for the TDD prompt template
+  formattedSourceCode?: string, // Formatted source code for the TDD prompt template
+  formattedTestCode?: string // Formatted test code for the TDD prompt template
 ): Promise<{ responseText: string; llmInputPayload: GeminiContent[] }> { // llmInputPayload is now GeminiContent[]
   const config = vscode.workspace.getConfiguration("tddAICompanion");
   const geminiApiKey = config.get("geminiApiKey") as string;
@@ -561,11 +589,55 @@ async function callGenerativeApi(
     
     console.log("Full 'contents' array being sent to Gemini API:", JSON.stringify(contents, null, 2));
 
-    // Add system instruction to show thinking
+    // Construct the system instruction dynamically
+    const tddSystemInstruction = `You MUST ALWAYS structure your response in exactly two sections:
+
+1. ALWAYS begin with '**Thinking:**' followed by your detailed analysis, reasoning process, and considerations. This section is REQUIRED in every response and should contain at least 100 words showing your reasoning process. Never skip this section.
+
+2. Then ALWAYS follow with '**Answer:**' and format your answer with clear headings, bullet points, and code blocks as appropriate. Make this section well-structured and easy to read.
+
+Ensure code examples are properly formatted in markdown code blocks with the appropriate language specified. Both sections are mandatory for every response. Do not deviate from this format. Do not include any meta-commentary about the format itself. Also if possible when the user asks for a follow up question regarding the response try to accomodate what asks as long as it isn't doesnt have to do anything with actually displaying code but more so on clarifications on the suggestion
+
+You are a Test-Driven Development (TDD) agent designed to guide users through the TDD process step by step. Your task is to analyze the provided source code and test code, then suggest **one meaningful test case** that hasn't been written yet.
+
+In every response, do the following:
+
+1. **State what needs to be tested** — Be clear and specific.
+2. **Explain why this test is necessary** — Is it for correctness, input validation, edge case, etc.?
+3. **Give a natural-language example** of input and expected output (no code).
+4. **Indicate where the user is in the TDD cycle** (e.g., writing test, implementation, refactoring).
+5. **Always ask a follow-up question** to guide the next step. This is mandatory. Keep the user engaged in the TDD flow.
+
+Constraints:
+- Suggest **only one test case** at a time.
+- Do **not include code or JSON** in your output.
+- Use only the 'Relevant Source Code' when suggesting tests.
+- Use the 'Relevant Test Code' section only to avoid duplicates.
+- Keep your response conversational and helpful.
+
+---
+
+User Query:  
+${originalPrompt || 'N/A'}
+
+Feature Being Developed:  
+${feature || 'N/A'}
+
+Relevant Source Code:  
+\`\`\`json  
+${formattedSourceCode || 'N/A'}  
+\`\`\`
+
+Relevant Test Code (for context only — do not repeat tests already written):  
+\`\`\`json  
+${formattedTestCode || 'N/A'}  
+\`\`\`
+`;
+
     const requestBody = {
       contents,
       systemInstruction: {
-        parts: [{ text: "You MUST ALWAYS structure your response in exactly two sections:\n\n1. ALWAYS begin with '**Thinking:**' followed by your detailed analysis, reasoning process, and considerations. This section is REQUIRED in every response and should contain at least 100 words showing your reasoning process. Never skip this section.\n\n2. Then ALWAYS follow with '**Answer:**' and format your answer with clear headings, bullet points, and code blocks as appropriate. Make this section well-structured and easy to read.\n\nEnsure code examples are properly formatted in markdown code blocks with the appropriate language specified. Both sections are mandatory for every response. Do not deviate from this format. Do not include any meta-commentary about the format itself. Also if possible when the user asks for a follow up question regarding the response try to accomodate what asks as long as it isn't doesnt have to do anything with actually displaying code but more so on clarifications on the suggestion" }]
+        parts: [{ text: tddSystemInstruction }]
       }
     };
 
@@ -878,6 +950,23 @@ async function autoManageIndexForProject(context: vscode.ExtensionContext) {
 }
 
 // This method is called when your extension is deactivated
+async function formatCodeFilesToJson(fileUris: vscode.Uri[]): Promise<string> {
+  const fileContents: { [key: string]: string } = {};
+  const decoder = new TextDecoder();
+
+  for (const uri of fileUris) {
+    try {
+      const contentBytes = await vscode.workspace.fs.readFile(uri);
+      const content = decoder.decode(contentBytes);
+      fileContents[path.basename(uri.fsPath)] = content;
+    } catch (error) {
+      console.error(`Error reading file ${uri.fsPath}:`, error);
+      // Continue to next file even if one fails
+    }
+  }
+  return JSON.stringify(fileContents, null, 2);
+}
+
 export function deactivate() {
   // Dispose of the file system watcher
   // The watcher is automatically disposed when its containing extension is deactivated

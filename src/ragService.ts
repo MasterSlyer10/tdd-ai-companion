@@ -197,7 +197,7 @@ export class RAGService {
     testCodeChunks: CodeChunk[]
   ): string {
     // Helper to format chunks into a structured JSON
-    const formatChunksToJson = (chunks: CodeChunk[]) => {
+    const formatChunksToJson = (chunks: CodeChunk[], includeStructureAndHeaders: boolean = true) => {
       const codebaseJson: any = {
         codebase_structure: {},
         headers: {},
@@ -208,111 +208,119 @@ export class RAGService {
         const filePath = chunk.filePath;
         const relativePath = this.getRelativePath(filePath);
         const parts = relativePath.split(/[\/\\]/); // Split by / or \
-
-        // Skip the file part (last part) to get the directory
-        const dirPath = parts.slice(0, -1);
         const fileName = parts[parts.length - 1];
+        const dirPath = parts.slice(0, -1);
 
-        // Create the path and add the file
-        let currentObj = codebaseJson.codebase_structure;
-        for (const part of dirPath) {
-          if (!part) continue; // Skip empty parts
-          if (!currentObj[part]) {
-            currentObj[part] = {};
-          }
-          currentObj = currentObj[part];
-        }
-
-        // Add the file
-        if (fileName) {
-          currentObj[fileName] = "";
-        }
-
-        // Track file relationships (simplified for now)
-        // if (!filePathMap.has(relativePath)) {
-        //   filePathMap.set(relativePath, new Set<string>());
-        // }
-
-        // Initialize the file in headers if needed
-        if (!codebaseJson.headers[fileName]) {
-          codebaseJson.headers[fileName] = {
-            functions: [],
-            classes: {},
-          };
-        }
-
-        // Add function or method
-        if (chunk.type === "function") {
-          if (!codebaseJson.headers[fileName].functions.includes(chunk.name)) {
-            codebaseJson.headers[fileName].functions.push(chunk.name);
-          }
-        } else if (chunk.type === "method") {
-          // Parse class name and method name
-          const nameParts = chunk.name.split(".");
-          if (nameParts.length === 2) {
-            const className = nameParts[0];
-            const methodName = nameParts[1];
-
-            if (!codebaseJson.headers[fileName].classes[className]) {
-              codebaseJson.headers[fileName].classes[className] = {
-                methods: [],
-                relationships: [],
-              };
+        // Create the path and add the file (only if includeStructureAndHeaders is true)
+        if (includeStructureAndHeaders) {
+          let currentObj = codebaseJson.codebase_structure;
+          for (const part of dirPath) {
+            if (!part) continue; // Skip empty parts
+            if (!currentObj[part]) {
+              currentObj[part] = {};
             }
+            currentObj = currentObj[part];
+          }
 
-            if (
-              !codebaseJson.headers[fileName].classes[className].methods.includes(
-                methodName
-              )
-            ) {
-              codebaseJson.headers[fileName].classes[className].methods.push(
-                methodName
-              );
+          // Add the file
+          if (fileName) {
+            currentObj[fileName] = "";
+          }
+
+          // Initialize the file in headers if needed
+          if (!codebaseJson.headers[fileName]) {
+            codebaseJson.headers[fileName] = {
+              functions: [],
+              classes: {},
+            };
+          }
+        }
+
+        // Add function or method (only if includeStructureAndHeaders is true)
+        if (includeStructureAndHeaders) {
+          if (chunk.type === "function") {
+            if (!codebaseJson.headers[fileName].functions.includes(chunk.name)) {
+              codebaseJson.headers[fileName].functions.push(chunk.name);
+            }
+          } else if (chunk.type === "method") {
+            // Parse class name and method name
+            const nameParts = chunk.name.split(".");
+            if (nameParts.length === 2) {
+              const className = nameParts[0];
+              const methodName = nameParts[1];
+
+              if (!codebaseJson.headers[fileName].classes[className]) {
+                codebaseJson.headers[fileName].classes[className] = {
+                  methods: [],
+                  relationships: [],
+                };
+              }
+
+              if (
+                !codebaseJson.headers[fileName].classes[className].methods.includes(
+                  methodName
+                )
+              ) {
+                codebaseJson.headers[fileName].classes[className].methods.push(
+                  methodName
+                );
+              }
             }
           }
         }
 
-        // Extract code snippets
+        // Extract code snippets (always include code)
         if (!codebaseJson.code[fileName]) {
           codebaseJson.code[fileName] = {};
         }
         codebaseJson.code[fileName][chunk.name] = chunk.content;
       });
+
+      // If not including structure and headers, return only the code part
+      if (!includeStructureAndHeaders) {
+        return JSON.stringify({ code: codebaseJson.code }, null, 2);
+      }
+
       return JSON.stringify(codebaseJson, null, 2);
     };
 
-    const formattedSourceCode = formatChunksToJson(sourceCodeChunks);
-    const formattedTestCode = formatChunksToJson(testCodeChunks);
+    const formattedSourceCode = formatChunksToJson(sourceCodeChunks, true); // Include structure and headers for source
+    const formattedTestCode = formatChunksToJson(testCodeChunks, false); // Only include code for test
 
     // Format the final prompt with JSON
-    return `You are a Test-Driven Development (TDD) agent. Your goal is to analyze the given source code and suggest one essential test case to verify correctness, based on the user's query and the specified feature.
+    return `You are a Test-Driven Development (TDD) agent designed to guide users through the TDD process step by step. Your task is to analyze the provided source code and test code, then suggest **one meaningful test case** that hasn't been written yet.
 
-Response Requirements:
-- Clearly state what needs to be tested.
-- Explain why this test is necessary (e.g., correctness, security, edge case).
-- Provide an example input and expected output.
-- Only suggest one test case per response.
-- Avoid suggesting any tests that already exist in the test code provided.
+In every response, do the following:
+
+1. **State what needs to be tested** — Be clear and specific.
+2. **Explain why this test is necessary** — Is it for correctness, input validation, edge case, etc.?
+3. **Give a natural-language example** of input and expected output (no code).
+4. **Indicate where the user is in the TDD cycle** (e.g., writing test, implementation, refactoring).
+5. **Always ask a follow-up question** to guide the next step. This is mandatory. Keep the user engaged in the TDD flow.
 
 Constraints:
-- Do not include any code or JSON in your response.
-- Focus on a specific functionality or edge case, not a generic test.
-- When generating test suggestions, focus ONLY on the 'Relevant Source Code' section. The 'Relevant Test Code' section is provided for context to help you avoid suggesting duplicate tests.
+- Suggest **only one test case** at a time.
+- Do **not include code or JSON** in your output.
+- Use only the 'Relevant Source Code' when suggesting tests.
+- Use the 'Relevant Test Code' section only to avoid duplicates.
+- Keep your response conversational and helpful.
 
-User Query:
+---
+
+User Query:  
 ${originalPrompt}
 
-Feature being developed:
+Feature Being Developed:  
 ${feature}
 
-Relevant Source Code:
-\`\`\`json
-${formattedSourceCode}
+Relevant Source Code:  
+\`\`\`json  
+${formattedSourceCode}  
 \`\`\`
 
-Relevant Test Code (for context only — do not repeat tests already written):
-\`\`\`json
-${formattedTestCode}
+Relevant Test Code (for context only — do not repeat tests already written):  
+\`\`\`json  
+${formattedTestCode}  
 \`\`\`
 `;
   }

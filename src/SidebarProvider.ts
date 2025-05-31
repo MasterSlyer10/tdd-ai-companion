@@ -17,7 +17,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private _context: vscode.ExtensionContext;
   private _ragService: RAGService;
 
-  private _checkedItems: string[] = [];
+  private _checkedItems: string[] = []; // For source files
+  private _checkedTestItems: string[] = []; // For test files
 
   // Update the chat history type
   private _chatHistory: ChatMessage[] = [];
@@ -79,6 +80,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       "checkedItems",
       []
     );
+    // Load checked test items
+    this._checkedTestItems = this._context.workspaceState.get<string[]>(
+      "checkedTestItems",
+      []
+    );
 
     // Load chat history with type checking and migration
     const savedHistoryTyped = this._context.workspaceState.get<any[]>(
@@ -113,6 +119,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this._sourceFiles.map((file) => file.fsPath)
     );
 
+
+    // Save test files
+    this._context.workspaceState.update(
+      "testFiles",
+      this._testFiles.map((file) => file.fsPath)
+    );
+
+    
+    // Save checked items
+    this._context.workspaceState.update(
+      "checkedItems",
+      this._checkedItems
+    );
+    // Save checked test items
+    this._context.workspaceState.update(
+      "checkedTestItems",
+      this._checkedTestItems
+    );
   }
 
   public resolveWebviewView(
@@ -206,6 +230,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         case "deselectSourceFile":
           this.removeSourceFile(vscode.Uri.file(message.path));
           break;
+        case "selectTestFile":
+          this.addTestFile(vscode.Uri.file(message.path));
+          break;
+        case "deselectTestFile":
+          this.removeTestFile(vscode.Uri.file(message.path));
+          break;
         case "openFile":
           vscode.workspace
             .openTextDocument(vscode.Uri.file(message.path))
@@ -219,9 +249,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
         case "saveCheckedItems":
           this._checkedItems = message.checkedItems;
+          this._checkedTestItems = message.checkedTestItems; // Save checked test items
           this._context.workspaceState.update(
             "checkedItems",
             this._checkedItems
+          );
+          this._context.workspaceState.update(
+            "checkedItems",
+            this._checkedItems
+          );
+          break;
+        case "saveCheckedTestItems": // New message handler
+          this._checkedTestItems = message.checkedTestItems;
+          this._context.workspaceState.update(
+            "checkedTestItems",
+            this._checkedTestItems
           );
           break;
         case "newChat":
@@ -384,7 +426,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   public addTestFile(file: vscode.Uri) {
     if (!this._testFiles.some((f) => f.fsPath === file.fsPath)) {
       this._testFiles.push(file);
+      // Also add to checked test items
+      this._checkedTestItems.push(file.fsPath);
       this.postTestFilesUpdate();
+      this.postCheckedTestItemsUpdate(); // Notify webview about checked test items
       this.saveState();
     }
   }
@@ -393,7 +438,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._testFiles = this._testFiles.filter(
       (f) => f.fsPath !== file.fsPath
     );
+    // Also remove from checked test items
+    this._checkedTestItems = this._checkedTestItems.filter(itemPath => itemPath !== file.fsPath);
     this.postTestFilesUpdate();
+    this.postCheckedTestItemsUpdate(); // Notify webview about checked test items
+    // Also send a message to uncheck the item in the file tree
+    if (this._view) {
+        this._view.webview.postMessage({
+            command: "uncheckFileTreeItem",
+            path: file.fsPath,
+            treeType: 'test' // Specify tree type
+        });
+    }
     this.saveState();
   }
 
@@ -402,6 +458,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this._view.webview.postMessage({
         command: "updateTestFiles",
         files: this._testFiles.map((f) => f.fsPath),
+      });
+    }
+  }
+
+  private postCheckedTestItemsUpdate() {
+    if (this._view) {
+      this._view.webview.postMessage({
+        command: "updateCheckedTestItems",
+        checkedTestItems: this._checkedTestItems,
       });
     }
   }
@@ -529,6 +594,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this._view.webview.postMessage({
             command: "uncheckFileTreeItem",
             path: file.fsPath,
+            treeType: 'source' // Specify tree type
         });
     }
     this.postSourceFilesUpdate();
@@ -588,50 +654,63 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                         <div class="info-item">
                             <div class="info-label">
                                 <i class="codicon codicon-symbol-event"></i>
-                                <span>Feature:</span>
+                                <span>Feature/Function:</span>
                             </div>
                             <div class="feature-input-wrapper">
                                 <input type="text" id="feature-input" placeholder="What feature do you want to test?" />
                             </div>
                         </div>
 
-                        <!-- File Explorer Tree View -->
+                        <div class="file-warning-message">
+                            <i class="codicon codicon-warning"></i>
+                            <span>For best results, please select only the files related to your question. Sending too many files may reduce accuracy and slow down responses.</span>
+                        </div>
+
+                        <!-- Source File Explorer Tree View -->
                         <div class="tree-view-container">
                             <div class="tree-view-header">
-                                <h3>Workspace Files</h3>
-                                <div class="tree-view-controls">
-                                    <button id="refresh-tree" class="icon-button" title="Refresh">
-                                        <i class="codicon codicon-sync"></i>
-                                    </button>
+                                <div class="header-top-row">
+                                    <h3>Source Files</h3>
+                                    <div class="tree-view-controls">
+                                        <button id="refresh-source-tree" class="icon-button" title="Refresh Source Files">
+                                            <i class="codicon codicon-sync"></i>
+                                        </button>
+                                    </div>
                                 </div>
+                                <div id="source-files" class="chip-container">None selected</div>
                             </div>
                             <div class="tree-filter">
                                 <div class="source-input-wrapper">
-                                    <input type="text" id="file-filter" placeholder="Filter files...">
+                                    <input type="text" id="source-file-filter" placeholder="Filter source files...">
                                     <i id="source-error-icon" class="codicon codicon-warning"></i>
                                 </div>
-                                <div class="source-warning-message">
-                                    <i class="codicon codicon-warning"></i>
-                                    <span>For best results, please select only the files related to your question. Sending too many files may reduce accuracy and slow down responses.</span>
-                                </div>
                             </div>
-                            <div id="file-tree" class="tree-view"></div>
+                            <div id="source-file-tree" class="tree-view"></div>
                         </div>
 
-                        <div class="selection-summary">
-
-                            <!-- Removed the Source Files toggle control -->
-                            
-                            <div class="selection-section">
-                                <h4>Source Files</h4>
-                                <div id="source-files" class="chip-container">None selected</div>
-                            </div>
-                            
-                            <div class="selection-section">
-                                <h4>Test Files</h4>
+                        <!-- Test File Explorer Tree View -->
+                        <div class="tree-view-container">
+                            <div class="tree-view-header">
+                                <div class="header-top-row">
+                                    <h3>Test Files</h3>
+                                    <div class="tree-view-controls">
+                                        <button id="refresh-test-tree" class="icon-button" title="Refresh Test Files">
+                                            <i class="codicon codicon-sync"></i>
+                                        </button>
+                                    </div>
+                                </div>
                                 <div id="test-files" class="chip-container">None selected</div>
                             </div>
+                            <div class="tree-filter">
+                                <div class="test-input-wrapper">
+                                    <input type="text" id="test-file-filter" placeholder="Filter test files...">
+                                    <i id="test-error-icon" class="codicon codicon-warning"></i>
+                                </div>
+                            </div>
+                            <div id="test-file-tree" class="tree-view"></div>
                         </div>
+
+
                     </div>
                 </section>
     

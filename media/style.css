@@ -513,8 +513,9 @@ body {
 
 .tree-view-header {
   display: flex;
+  flex-direction: column; /* Ensure vertical stacking of its children */
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start; /* Align items to the start of the cross axis (left) */
   padding: 6px 10px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--background-elevated);
@@ -529,6 +530,14 @@ body {
 .tree-view-controls {
   display: flex;
   gap: 4px;
+}
+
+.header-top-row {
+  display: flex;
+  justify-content: space-between; /* Distribute space between h3 and controls */
+  align-items: center; /* Vertically align h3 and controls */
+  width: 100%; /* Ensure it takes full width of its parent */
+  margin-bottom: 4px; /* Add a small margin below this row */
 }
 
 .tree-filter {
@@ -687,8 +696,12 @@ body {
 }
 
 .tree-item-source-icon.indeterminate {
-  color: var(--vscode-editorInfo-foreground); /* A lighter gray/info color for indeterminate */
-  opacity: 0.8;
+  margin: 0 4px 0 0;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--vscode-icon-foreground); /* Default gray color */
+  opacity: 0.6;
+  transition: color 0.2s ease, opacity 0.2s ease;
 }
 
 /* Styles for the new test file icon */
@@ -1466,7 +1479,7 @@ body {
     color: red;
 }
 
-.source-warning-message {
+.file-warning-message {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1483,4 +1496,60 @@ body {
 .source-warning-message .codicon {
   font-size: 14px; /* Adjust icon size */
   flex-shrink: 0; /* Prevent icon from shrinking */
+}
+
+/* Styles for the moved source files chip container */
+.selection-section.source-files-chips-moved {
+  margin-top: 8px; /* Add some space above the moved section */
+  padding: 4px 8px; /* Add some padding to match other sections */
+  border: 1px solid var(--border-color); /* Add a border for visual separation */
+  border-radius: 4px; /* Match other rounded corners */
+  background-color: var(--background-card); /* Match background */
+}
+
+/* Styles for the moved test files chip container */
+.selection-section.test-files-chips-moved {
+  margin-top: 8px; /* Add some space above the moved section */
+  padding: 4px 8px; /* Add some padding to match other sections */
+  border: 1px solid var(--border-color); /* Add a border for visual separation */
+  border-radius: 4px; /* Match other rounded corners */
+  background-color: var(--background-card); /* Match background */
+}
+
+.test-input-wrapper {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  border-radius: 2px;
+  background-color: var(--vscode-input-background);
+}
+
+.test-input-wrapper input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  background: transparent;
+  color: var(--vscode-input-foreground);
+}
+
+.test-input-wrapper input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.test-input-error-border {
+  border-color: red !important;
+}
+
+.test-input-error-border input::placeholder {
+  color: red !important;
+}
+
+#test-error-icon {
+  color: red;
+  font-size: 16px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  display: none; /* Only show on error */
 }
