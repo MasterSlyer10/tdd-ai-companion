@@ -36,9 +36,10 @@
   const sourceFileFilterInputContainer = document.querySelector('.tree-filter'); // Assuming the input is wrapped in .tree-filter
 
   const chatInput = document.getElementById("chat-input");
-  const sendButton = document.getElementById("send-button");
+  const sendButton = document.getElementById("send-button");  
   const suggestTestButton = document.getElementById("suggest-test-button");
-  const suggestTestCaseButton = document.getElementById("suggest-test-case-button"); // New button
+  // Use the suggestTestButton as suggestTestCaseButton since they serve the same purpose
+  const suggestTestCaseButton = suggestTestButton;
   const chatMessages = document.getElementById("chat-messages");
   const suggestionsHistory = document.getElementById("suggestions-history");
 
@@ -266,21 +267,21 @@
 
       suggestTestButton.addEventListener("click", () => {
         console.log("Suggest test button clicked");
-        sendPredefinedSuggestion();
+        sendSuggestTestCaseMessage(); // Changed to use the defined function
       });
     } else {
       console.error("Suggest test button not found");
     }
 
     // Add event listener for the new suggest test case button
-    if (suggestTestCaseButton) {
-      suggestTestCaseButton.addEventListener("click", () => {
-        console.log("Suggest test case button clicked");
-        sendSuggestTestCaseMessage(); // New function to handle this
-      });
-    } else {
-      console.error("Suggest test case button not found");
-    }
+    // if (suggestTestCaseButton) {
+    //   suggestTestCaseButton.addEventListener("click", () => {
+    //     console.log("Suggest test case button clicked");
+    //     sendSuggestTestCaseMessage(); // New function to handle this
+    //   });
+    // } else {
+    //   console.error("Suggest test case button not found");
+    // }
 
     if (chatInput) {
       chatInput.addEventListener("keydown", (e) => {
@@ -1112,7 +1113,7 @@
     // Send message to extension with the prompt ID
     vscode.postMessage({
       command: "requestTestSuggestion",
-      message: predefinedMessage,
+      message: message, // FIXED: Use message instead of predefinedMessage
       promptId: promptId, // Include the prompt ID
     });
   }
@@ -1148,13 +1149,9 @@
   
      // Send a predefined message for suggesting a test case
     const predefinedMessage =
-      "Suggest a new test case for my current implementation"; // Same message as the lightbulb for now
-
-    // Set the input field text (optional - shows the user what's being sent)
-    if (chatInput) {
-      chatInput.value = predefinedMessage;
-    }
-
+      "Suggest a new test case for my current implementation"; // Same message as the lightbulb for now    // Don't set in the input field since we're going to send it directly
+    
+    console.log("Sending test case suggestion request with message:", predefinedMessage);
     setSendButtonState("stop"); // Change to Stop button
     isRequestCancelled = false; // Reset cancellation flag for new request
 
@@ -1165,7 +1162,7 @@
     // Add message to UI
     addMessageToChat(predefinedMessage, true, promptId); // Pass promptId to addMessageToChat
 
-    // Clear input field
+    // Make sure input field is clear
     if (chatInput) {
       chatInput.value = "";
     }
