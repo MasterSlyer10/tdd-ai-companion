@@ -1104,9 +1104,9 @@ body {
   overflow-y: auto; /* Allows content to scroll if it exceeds max-height */
   max-height: 50vh;
   min-height: 0; /* Important: Allows shrinking below intrinsic content height */
-  transition: max-height 1s ease-out, padding-top 1s ease-out,
-    /* Target individual padding properties */ padding-bottom 1s ease-out,
-    /* for better control */ margin-bottom 1s ease-out; /* Keep margin transition */
+  transition: max-height 0.5s ease-in-out, padding-top 0.5s ease-in-out,
+    /* Target individual padding properties */ padding-bottom 0.5s ease-in-out,
+    /* for better control */ margin-bottom 0.5s ease-in-out; /* Keep margin transition */
   /* You could also just use 'padding 1s ease-out' if you change all padding values */
 }
 
