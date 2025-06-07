@@ -107,6 +107,12 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px; /* Add some space below the header */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--background-elevated);
+  padding: 16px 0 8px 0; /* Add bottom padding for visual separation */
+  border-bottom: 1px solid var(--border-color);
 }
 
 .project-panel-header .section-title {
@@ -1062,7 +1068,7 @@ body {
 .project-panel {
   background-color: var(--background-elevated);
   border-radius: 4px;
-  padding: 16px; /* Increased padding for more whitespace */
+  padding: 0px 16px 16px 16px; /* Increased padding for more whitespace */
   margin-bottom: 16px; /* Consistent with other margins */
   border-bottom: 1px solid var(--border-color); /* Add a subtle divider */
   flex: 0 0 auto; /* Don't grow or shrink by default */
