@@ -17,11 +17,13 @@
   const TOKEN_LIMIT = 100000; // Token limit
   let isRequestCancelled = false; // Flag to track if the current request is cancelled
   let activePromptId = null; // Track the ID of the currently active prompt
-
   // DOM Elements
   let tokenCountDisplay = null; // To display token count
   const featureInput = document.getElementById("feature-input");
   // const editFeatureButton = document.getElementById("edit-feature");
+  
+  const projectPanel = document.querySelector(".project-panel");
+  const toggleProjectPanelBtn = document.getElementById("toggle-project-panel");
 
   const sourceFileTreeElement = document.getElementById("source-file-tree");
   const testFileTreeElement = document.getElementById("test-file-tree");
@@ -142,35 +144,27 @@
         removeContextMenu();
       }
     });
-    
-    // Add global document-level click handler for all thinking section toggles
+      // Add global document-level click handler for all thinking section toggles
     document.addEventListener("click", (e) => {
-      // Check if the clicked element is a thinking header or its child
-      let target = e.target;
-      let thinkingHeader = null;
+      // Use closest to find the thinking header or toggle button
+      const thinkingHeader = e.target.closest('.thinking-header');
+      const toggleButton = e.target.closest('.thinking-toggle');
+      const thinkingTitle = e.target.closest('.thinking-title');
       
-      // Check if we clicked the header itself
-      if (target.classList && target.classList.contains('thinking-header')) {
-        thinkingHeader = target;
-      } 
-      // Check if we clicked the toggle button or its icon
-      else if (target.classList && 
-          (target.classList.contains('thinking-toggle') || 
-           (target.parentElement && target.parentElement.classList.contains('thinking-toggle')))) {
-        // Get the header (parent of toggle button or grandparent of icon)
-        thinkingHeader = target.classList.contains('thinking-toggle') ? 
-                        target.parentElement : 
-                        target.parentElement.parentElement;
-      }
-      // Check if we clicked on the title text
-      else if (target.classList && target.classList.contains('thinking-title')) {
-        thinkingHeader = target.parentElement;
+      // Determine which element was clicked
+      let headerElement = null;
+      if (thinkingHeader) {
+        headerElement = thinkingHeader;
+      } else if (toggleButton) {
+        headerElement = toggleButton.closest('.thinking-header');
+      } else if (thinkingTitle) {
+        headerElement = thinkingTitle.closest('.thinking-header');
       }
       
       // If we found a thinking header, toggle its section
-      if (thinkingHeader) {
-        const thinkingSection = thinkingHeader.parentElement;
-        if (thinkingSection && thinkingSection.classList.contains('thinking-section')) {
+      if (headerElement) {
+        const thinkingSection = headerElement.closest('.thinking-section');
+        if (thinkingSection) {
           e.preventDefault();
           e.stopPropagation();
           
@@ -313,13 +307,25 @@
       if (tokenLimitMsg) tokenLimitMsg.remove();
       updateTokenDisplay(); // Update display after reset
       setSendButtonState("send"); // Ensure button is in send state
-    });
-
-    if (openSettingsButton) {
+    });    if (openSettingsButton) {
       openSettingsButton.addEventListener("click", () => {
         vscode.postMessage({ command: "openExtensionSettings" });
       });
     }
+    // Toggle project panel collapse/expand
+    if (toggleProjectPanelBtn && projectPanel) {
+      toggleProjectPanelBtn.addEventListener("click", (e) => {
+        e.stopPropagation(); // Prevent event bubbling
+        toggleProjectPanel();
+      });
+      
+      // Also allow clicking the title wrapper to toggle
+      const titleWrapper = document.querySelector('.section-title-wrapper');
+      if (titleWrapper) {
+        titleWrapper.addEventListener("click", toggleProjectPanel);
+      }
+    }
+    
     // Clear history
     // clearHistoryButton.addEventListener("click", clearHistory);
   }
@@ -450,7 +456,6 @@
     testFileTreeElement.innerHTML = "";
     renderTreeNode(fileTree, testFileTreeElement, 0, 'test');
   }
-
   function renderTreeNode(node, parentElement, level, treeType) {
     const filter = (treeType === 'source' ? sourceFileFilterInput : testFileFilterInput).value.toLowerCase();
 
@@ -470,6 +475,19 @@
     if (node.type === "directory" && filter) {
       const anyChildMatches = hasMatchingChild(node, filter);
       if (!anyChildMatches) return;
+    }
+    
+    // Sort children before rendering if this is a directory
+    if (node.type === "directory" && node.children && node.children.length > 0) {
+      // Sort children: directories first, then files, both alphabetically
+      node.children.sort((a, b) => {
+        // If types are different, directories come first
+        if (a.type !== b.type) {
+          return a.type === "directory" ? -1 : 1;
+        }
+        // If types are the same, sort alphabetically by name
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
     }
 
     const itemElement = document.createElement("div");
@@ -1840,9 +1858,6 @@
                     chatMessages.appendChild(tokenLimitMsg);
                 }
             }
-            if (tokenCountDisplay) {
-                 tokenCountDisplay.style.color = "red";
-            }
         }
         console.log("[Webview] addResponse: Finalizing chat turn.");
         finalizeChatTurn(); // Ensure UI is reset after processing response
@@ -2003,6 +2018,7 @@
         // Special handling for code blocks (keep this logic for code blocks without thinking/answer markers)
         else {
           // Check if we're in the middle of a code block
+
           const codeBlockStarts = (currentRawText.match(/```/g) || []).length;
           const isInCodeBlock = codeBlockStarts % 2 !== 0;
           console.log("[Stream Debug] Code block analysis - Starts:", codeBlockStarts, "Is in code block:", isInCodeBlock);
@@ -2557,73 +2573,62 @@
       return null;
   }
 
+  // Function to toggle the project panel collapse state
+  function toggleProjectPanel() {
+    if (!projectPanel) return;
+    
+    projectPanel.classList.toggle('collapsed');
+    
+    // Update icon
+    if (toggleProjectPanelBtn) {
+      const icon = toggleProjectPanelBtn.querySelector('i');
+      if (icon) {
+        if (projectPanel.classList.contains('collapsed')) {
+          icon.className = 'codicon codicon-chevron-down';
+        } else {
+          icon.className = 'codicon codicon-chevron-up';
+        }
+      }
+    }
+    
+    // Save state
+    saveProjectPanelState();
+  }
+  
+  // Function to save the project panel state
+  function saveProjectPanelState() {
+    try {
+      const isCollapsed = projectPanel ? projectPanel.classList.contains('collapsed') : false;
+      vscode.setState({
+        ...vscode.getState(),
+        projectPanelCollapsed: isCollapsed,
+      });
+    } catch (e) {
+      console.error("Failed to save project panel state:", e);
+    }
+  }
+  
+  // Function to load the project panel state
+  function loadProjectPanelState() {
+    try {
+      const isCollapsed = vscode.getState()?.projectPanelCollapsed;
+      if (isCollapsed && projectPanel) {
+        projectPanel.classList.add('collapsed');
+        
+        // Update icon
+        if (toggleProjectPanelBtn) {
+          const icon = toggleProjectPanelBtn.querySelector('i');
+          if (icon) {
+            icon.className = 'codicon codicon-chevron-down';
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load project panel state:", e);
+    }
+  }
 
   // Initial render
   updateSourceFilesDisplay();
   updateTestFilesDisplay();
-
-  // Add a global document click handler for all thinking section toggles
-  document.addEventListener('click', function(e) {
-    // Check if clicked element is a thinking header or toggle button
-    const thinkingHeader = e.target.closest('.thinking-header');
-    const toggleButton = e.target.closest('.thinking-toggle');
-
-    if (thinkingHeader || toggleButton) {
-      // Find the thinking section
-      const thinkingSection = (thinkingHeader || toggleButton).closest('.thinking-section');
-      if (thinkingSection) {
-        console.log("[Stream Debug] Thinking section click detected on:", e.target);
-
-        // If it was the toggle button, prevent propagation to avoid double-toggle
-        if (toggleButton) {
-          e.stopPropagation();
-        }
-
-        // Toggle the collapsed state
-        const isCollapsed = thinkingSection.classList.contains('collapsed');
-        console.log("[Stream Debug] Current state before toggle:", isCollapsed ? "collapsed" : "expanded");
-
-        if (isCollapsed) {
-          // Expand
-          thinkingSection.classList.remove('collapsed');
-
-          // Update icon
-          const icon = thinkingSection.querySelector('.thinking-toggle i');
-          if (icon) {
-            icon.className = 'codicon codicon-chevron-down';
-          }
-
-          // Make content visible immediately
-          const content = thinkingSection.querySelector('.thinking-content');
-          if (content) {
-            content.style.display = 'block';
-            content.style.visibility = 'visible';
-            content.style.opacity = '1';
-            content.style.maxHeight = '500px';
-            content.style.paddingTop = '10px';
-            content.style.paddingBottom = '10px';
-            content.style.transform = 'scaleY(1)';
-            
-            // Toggle class after setting styles for expansion
-            thinkingSection.classList.remove('collapsed');
-          } else {
-            // Hide content immediately when collapsing
-            content.style.display = 'none';
-            content.style.visibility = 'hidden';
-            content.style.opacity = '0';
-            content.style.maxHeight = '0';
-            content.style.paddingTop = '0';
-            content.style.paddingBottom = '0';
-            content.style.transform = 'scaleY(0)';
-            
-            // Toggle class after setting styles for collapse
-            thinkingSection.classList.add('collapsed');
-          }
-        } else {
-          // If no content element found, just toggle the class
-          thinkingSection.classList.toggle('collapsed');
-        }
-      }
-    }
-  });
 })();

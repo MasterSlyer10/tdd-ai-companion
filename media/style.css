@@ -12,7 +12,8 @@
   --button-background: var(--vscode-button-background);
   --button-foreground: var(--vscode-button-foreground);
   --button-hover: var(--vscode-button-hoverBackground);
-  --shadow-color: rgba(0, 0, 0, 0.1);}
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
@@ -89,6 +90,10 @@ body {
 .main-container {
   padding: 16px; /* Consistent padding on all sides */
   padding-top: 0; /* Remove top padding as header has margin-bottom */
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 32px); /* Full height minus padding */
+  overflow: hidden; /* Prevent overall scrolling */
 }
 
 .section-title {
@@ -105,12 +110,22 @@ body {
 }
 
 .project-panel-header .section-title {
-    margin: 0; /* Remove default margin from the title */
+  margin: 0; /* Remove default margin from the title */
 }
 
 .project-panel-header .settings-container {
-    padding-bottom: 0; /* Remove padding from the settings container */
-    width: auto; /* Allow the container to size based on content */
+  padding-bottom: 0; /* Remove padding from the settings container */
+  width: auto; /* Allow the container to size based on content */
+}
+
+/* Ensure header remains visible when panel is collapsed */
+.project-panel.collapsed .panel-group {
+  display: none;
+}
+
+/* Ensure header remains visible when panel is collapsed */
+.project-panel.collapsed .panel-group {
+  display: none;
 }
 
 .panel-group {
@@ -141,7 +156,7 @@ body {
 }
 
 .user-message {
-    align-self: flex-end; /* Align user messages to the right */
+  align-self: flex-end; /* Align user messages to the right */
 }
 
 .info-value {
@@ -233,7 +248,6 @@ body {
   border: none; /* Ensure no border on focus/hover/active */
 }
 
-
 /* Style for the lightbulb icon button */
 .suggest-test-button-icon {
   width: 32px;
@@ -305,7 +319,6 @@ body {
   font-size: 14px; /* Adjust icon size */
 }
 
-
 /* Style for the send/stop button */
 .send-button {
   width: 32px;
@@ -326,7 +339,7 @@ body {
 }
 
 .send-button .codicon {
-    font-size: 18px; /* Adjust icon size */
+  font-size: 18px; /* Adjust icon size */
 }
 
 /* Stop button animation (ChatGPT style) */
@@ -346,15 +359,16 @@ body {
 }
 
 .send-button[data-state="stop"] {
-  background-color: var(--vscode-button-background); /* Use a distinct background */
+  background-color: var(
+    --vscode-button-background
+  ); /* Use a distinct background */
   color: var(--vscode-button-foreground);
   animation: stop-pulse 1.5s infinite ease-in-out;
 }
 
 .send-button[data-state="stop"]:hover {
-    background-color: var(--vscode-button-hoverBackground);
+  background-color: var(--vscode-button-hoverBackground);
 }
-
 
 .primary-button {
   display: flex;
@@ -400,7 +414,9 @@ body {
 }
 
 .token-count-display.error {
-    color: var(--vscode-errorForeground); /* Use error color when limit is reached */
+  color: var(
+    --vscode-errorForeground
+  ); /* Use error color when limit is reached */
 }
 
 .icon-button:hover {
@@ -457,14 +473,17 @@ body {
 }
 
 .ai-message {
-  background-color: var(--background-elevated);
+  background-color: transparent; /* Make AI message container transparent */
   align-self: flex-start;
   width: 100%;
   max-width: 90%; /* Allow AI messages to be a bit wider */
-   /* Avatar and content will be handled by .message flex */
+  /* Avatar and content will be handled by .message flex */
 }
 
 .ai-message .message-content {
+  background-color: var(
+    --background-elevated
+  ); /* Apply background only to content */
   border: 1px solid var(--border-color);
   padding: 8px 12px 0px 12px; /* Add padding to the content */
   border-radius: 6px; /* Match the message border radius */
@@ -623,8 +642,8 @@ body {
 
 /* Ensure test files container has proper styling */
 #test-files {
+  min-height: 24px;
   /* Inherits most styles from .chip-container */
-  /* Add any specific overrides if needed */
 }
 
 .file-chip {
@@ -816,10 +835,7 @@ input.feature-input-error::placeholder {
   border: none;
   border-radius: 4px;
   background-color: transparent;
-  color: var(
-    --vscode-button-secondaryForeground,
-    #ffffff
-  );
+  color: var(--vscode-button-secondaryForeground, #ffffff);
   font-size: 12px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -840,11 +856,58 @@ input.feature-input-error::placeholder {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px; /* Add padding at the bottom */
+  border-bottom: 1px solid var(--border-color, rgba(128, 128, 128, 0.2)); /* Add subtle separator */
+}
+
+/* New chat panel header style to match project panel */
+.chat-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px; /* Match project panel margin */
+  padding-bottom: 8px; /* Add padding at the bottom */
+  border-bottom: 1px solid var(--border-color, rgba(128, 128, 128, 0.2)); /* Add subtle separator */
+}
+
+.chat-panel-header .section-title {
+  margin: 0; /* Remove default margin from the title */
+  font-size: 16px; /* Match project panel title size */
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-panel-header .section-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1; /* Take up available space */
+}
+
+.chat-panel-header .section-title-wrapper .codicon {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.chat-panel-header .chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Add some space between the buttons */
 }
 
 .chat-header .section-title {
   margin: 0;
+  font-size: 16px; /* Match project panel title size */
+  font-weight: 600;
+}
+
+.chat-header .section-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1; /* Take up available space */
+  cursor: pointer; /* Show pointer cursor on the whole header */
 }
 
 .chat-header-actions {
@@ -853,10 +916,7 @@ input.feature-input-error::placeholder {
   gap: 8px; /* Add some space between the buttons */
 }
 
-#new-chat-button {
-  font-size: 12px;
-  padding: 4px 8px;
-}
+/* #new-chat-button uses default icon-button styling */
 
 /* Add these styles for markdown formatting */
 
@@ -968,7 +1028,8 @@ input.feature-input-error::placeholder {
   padding: 15px; /* Adjust padding to be consistent */
   display: flex;
   flex-direction: column;
-  /* Removed min-height: 0; */
+  min-height: 0; /* Important: allows the flex item to shrink below content size */
+  transition: max-height 0.3s ease-out;
 }
 
 /* Keep the input container at the bottom */
@@ -1002,22 +1063,76 @@ body {
   background-color: var(--background-elevated);
   border-radius: 4px;
   padding: 16px; /* Increased padding for more whitespace */
-  margin-bottom: 20px; /* Increased margin for better separation */
+  margin-bottom: 16px; /* Consistent with other margins */
   border-bottom: 1px solid var(--border-color); /* Add a subtle divider */
-  flex: 0 0 auto; /* Prevent growing or shrinking */
+  flex: 0 0 auto; /* Don't grow or shrink by default */
   overflow-y: auto; /* Make project panel scrollable if content overflows */
-  max-height: 300px; /* Set a maximum height for the project panel */
+  max-height: 50vh; /* Limit to half viewport height by default */
   min-height: 0; /* Allow the element to shrink below its content size */
-  /* Other existing styles... */
+  transition: max-height 0.3s ease-out, padding 0.3s ease-out,
+    margin 0.3s ease-out;
+}
+
+/* Collapsed project panel style */
+.project-panel.collapsed {
+  max-height: 56px; /* Just enough to show the header */
+  overflow: hidden;
+  margin-bottom: 8px; /* Reduce margin when collapsed */
+  padding: 12px 16px 0; /* Adjust padding for collapsed state */
+}
+
+/* Style for the project panel toggle button */
+.project-panel-header .section-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1; /* Take up available space */
+  cursor: pointer; /* Show pointer cursor on the whole header */
+}
+
+.project-panel-header .section-title-wrapper .codicon {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+#toggle-project-panel {
+  transition: transform 0.3s ease, background-color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+#toggle-project-panel:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+/* Rotate the chevron when collapsed */
+.project-panel.collapsed #toggle-project-panel i {
+  transform: rotate(180deg);
 }
 
 /* Make chat section take remaining space */
 .chat-section {
   display: flex;
   flex-direction: column;
-  flex: 1; /* Make chat section take remaining space */
+  flex: 1 1 auto; /* Grow and shrink as needed, starting from auto size */
   min-height: 200px; /* Set a minimum height for the chat section */
-  margin-bottom: 16px;
+  max-height: calc(100% - 60px); /* Calculate max height based on container */
+  margin-bottom: 0; /* No margin at the bottom */
+  margin-top: 8px; /* Add some space from the project panel */
+  transition: all 0.3s ease-out;
+  overflow: hidden; /* Hide overflow */
+  background-color: var(--background-elevated);
+  border-radius: 4px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+}
+
+/* Give chat section more space when project panel is collapsed */
+.project-panel.collapsed + .chat-section {
+  margin-top: 4px; /* Reduce top margin when project panel is collapsed */
+  max-height: calc(100% - 76px); /* Adjust for collapsed panel height */
 }
 
 /* Remove fixed height from chat container */
@@ -1029,8 +1144,12 @@ body {
   height: auto; /* Remove the 300px fixed height */
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: var(--background-elevated);
+  background-color: var(
+    --background-card
+  ); /* Use card background instead of elevated */
   padding: 0px;
+  overflow: hidden; /* Prevent overflow */
+  transition: flex-grow 0.3s ease-out;
   max-height: 100%;
 }
 
@@ -1056,7 +1175,8 @@ body {
   font-size: 18px; /* Slightly larger avatar icon */
 }
 
-.message-content-wrapper { /* New wrapper for content and actions */
+.message-content-wrapper {
+  /* New wrapper for content and actions */
   flex-grow: 1;
   display: flex;
   flex-direction: column;
@@ -1079,17 +1199,22 @@ body {
   margin-bottom: 6px;
   opacity: 0; /* Hidden by default */
   transition: opacity 0.2s ease-in-out;
+  background-color: transparent; /* Ensure transparent background */
 }
 
 /* Class to hide actions using display: none when needed by JS */
 .message-actions.hidden-by-js {
-    display: none;
+  display: none;
 }
 
 .user-message .message-actions {
   align-self: flex-end; /* Align actions to the right within the user message wrapper */
 }
 
+.ai-message .message-actions {
+  background-color: transparent !important; /* Ensure AI message actions have transparent background */
+  align-self: flex-start; /* Align actions to the left for AI messages */
+}
 
 .message:hover .message-actions {
   opacity: 1; /* Show on hover */
@@ -1116,7 +1241,10 @@ body {
 }
 
 .message-action-button:hover {
-  background-color: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+  background-color: var(
+    --vscode-toolbar-hoverBackground,
+    rgba(128, 128, 128, 0.15)
+  );
   color: var(--vscode-editor-foreground); /* Slightly more prominent on hover */
 }
 
@@ -1126,8 +1254,8 @@ body {
 
 /* Style for the copy button */
 .message-action-button.copy-button {
-    color: var(--vscode-descriptionForeground);
-    margin-right: 2px;
+  color: var(--vscode-descriptionForeground);
+  margin-right: 2px;
 }
 
 /* Position actions after the last line of text for user messages */
@@ -1173,32 +1301,39 @@ body {
 }
 
 .edit-action-button:hover {
-  background-color: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15)); /* Subtle hover */
+  background-color: var(
+    --vscode-toolbar-hoverBackground,
+    rgba(128, 128, 128, 0.15)
+  ); /* Subtle hover */
   color: var(--vscode-editor-foreground); /* More prominent on hover */
 }
 
 .edit-action-button .codicon {
-    font-size: 14px; /* Adjust icon size */
+  font-size: 14px; /* Adjust icon size */
 }
 
 /* Specific style for the Save & Resend button */
 .edit-action-button.save-resend-button {
-    color: var(--vscode-button-foreground); /* Use button foreground color for save */
+  color: var(
+    --vscode-button-foreground
+  ); /* Use button foreground color for save */
 }
 
 .edit-action-button.save-resend-button:hover {
-    background-color: var(--vscode-button-hoverBackground); /* Use button hover background for save */
+  background-color: var(
+    --vscode-button-hoverBackground
+  ); /* Use button hover background for save */
 }
 
 /* Specific style for the Cancel button */
 .edit-action-button.cancel-edit-button {
-    color: var(--vscode-descriptionForeground);
-    margin-left: 2px;
+  color: var(--vscode-descriptionForeground);
+  margin-left: 2px;
 }
 
 .edit-action-button.cancel-edit-button:hover {
-    background-color: var(--vscode-toolbar-hoverBackground);
-    color: var(--vscode-editor-foreground);
+  background-color: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-editor-foreground);
 }
 
 /* Ensure user and AI messages align correctly with the new structure */
@@ -1215,7 +1350,6 @@ body {
 .message.editing .message-content-wrapper {
   width: 100%;
 }
-
 
 /* Ensure the loading indicator is still visible */
 .loading-indicator {
@@ -1260,9 +1394,15 @@ body {
 }
 
 @keyframes cursor-blink {
-  0% { opacity: 1; }
-  50% { opacity: 0; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* Feature prompt guidance styles */
@@ -1297,7 +1437,9 @@ body {
 }
 
 /* Extra emphasis when feature input is required */
-#feature-input:empty, #feature-input:invalid, #feature-input.required {
+#feature-input:empty,
+#feature-input:invalid,
+#feature-input.required {
   border-color: var(--vscode-inputValidation-infoBorder);
 }
 
@@ -1310,9 +1452,15 @@ body {
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(0, 120, 215, 0.4); }
-  70% { box-shadow: 0 0 0 5px rgba(0, 120, 215, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(0, 120, 215, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 120, 215, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(0, 120, 215, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 120, 215, 0);
+  }
 }
 
 /* Thinking section styles */
@@ -1321,7 +1469,10 @@ body {
   border: 1px solid var(--vscode-panel-border);
   border-radius: 5px;
   overflow: hidden;
-  background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.05));
+  background-color: var(
+    --vscode-editor-inactiveSelectionBackground,
+    rgba(128, 128, 128, 0.05)
+  );
 }
 
 .thinking-header {
@@ -1329,7 +1480,10 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background-color: var(--vscode-sideBarSectionHeader-background, rgba(128, 128, 128, 0.1));
+  background-color: var(
+    --vscode-sideBarSectionHeader-background,
+    rgba(128, 128, 128, 0.1)
+  );
   cursor: pointer;
   border-bottom: 1px solid var(--vscode-panel-border);
   user-select: none; /* Prevent text selection when clicking */
@@ -1394,9 +1548,24 @@ body {
 
 /* Pulsing animation for thinking section while streaming */
 @keyframes thinking-pulse {
-  0% { background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.05)); }
-  50% { background-color: var(--vscode-editor-selectionHighlightBackground, rgba(128, 128, 128, 0.1)); }
-  100% { background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.05)); }
+  0% {
+    background-color: var(
+      --vscode-editor-inactiveSelectionBackground,
+      rgba(128, 128, 128, 0.05)
+    );
+  }
+  50% {
+    background-color: var(
+      --vscode-editor-selectionHighlightBackground,
+      rgba(128, 128, 128, 0.1)
+    );
+  }
+  100% {
+    background-color: var(
+      --vscode-editor-inactiveSelectionBackground,
+      rgba(128, 128, 128, 0.05)
+    );
+  }
 }
 
 .message.ai-message[data-streaming="true"] .thinking-section {
@@ -1470,13 +1639,13 @@ body {
 }
 
 .feature-input-error-border {
-    border: 1px solid red !important;
+  border: 1px solid red !important;
 }
 
 .feature-input-error {
-    border: none;
-    outline: none;
-    color: red;
+  border: none;
+  outline: none;
+  color: red;
 }
 
 .file-warning-message {
@@ -1487,7 +1656,9 @@ body {
   color: var(--text-secondary); /* Gray text */
   padding: 6px 8px; /* Padding */
   margin-top: 6px; /* Space from the input wrapper */
-  background-color: var(--vscode-inputValidation-infoBackground); /* Tooltip-like background */
+  background-color: var(
+    --vscode-inputValidation-infoBackground
+  ); /* Tooltip-like background */
   border: 1px solid var(--vscode-inputValidation-infoBorder); /* Tooltip-like border */
   border-radius: 3px; /* Slightly rounded corners */
   line-height: 1.4;

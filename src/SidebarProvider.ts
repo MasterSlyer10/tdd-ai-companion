@@ -500,7 +500,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       vscode.window.showErrorMessage(`Error loading workspace files: ${error}`);
     }
   }
-
   private buildFileTree(files: vscode.Uri[], workspaceRoot: string) {
     const fileTree: any = {
       name: "root",
@@ -535,6 +534,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             children: [],
           };
           currentNode.children.push(childNode);
+          
+          // Sort children alphabetically - directories first, then files
+          currentNode.children.sort((a: any, b: any) => {
+            // If types are different, directories come first
+            if (a.type !== b.type) {
+              return a.type === "directory" ? -1 : 1;
+            }
+            // If types are the same, sort alphabetically by name
+            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+          });
         }
 
         currentNode = childNode;
@@ -637,11 +646,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/components/prism-typescript.min.js"></script>
             <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/components/prism-python.min.js"></script>
         </head>
-        <body>
-            <div id="main-container" class="main-container">
+        <body>            <div id="main-container" class="main-container">
                 <section class="project-panel">
-                    <div class="project-panel-header">
-                        <h2 class="section-title">Project Configuration</h2>
+                    <div class="project-panel-header">                        <div class="section-title-wrapper">
+                            <h2 class="section-title">Project Configuration</h2>
+                            <button id="toggle-project-panel" class="icon-button" title="Collapse/Expand Project Panel">
+                                <i class="codicon codicon-chevron-up"></i>
+                            </button>
+                        </div>
                         <div class="settings-container">
                             <button id="open-settings-button" class="icon-button" title="Open Extension Settings">
                                 <i class="codicon codicon-settings-gear"></i>
@@ -712,14 +724,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 
                     </div>
-                </section>
-    
-                <section class="chat-section">
-                    <div class="chat-header">
-                        <h2 class="section-title">Test Suggestions</h2>
+                </section>                <section class="chat-section">                    <div class="chat-panel-header">
+                        <div class="section-title-wrapper">
+                            <h2 class="section-title">Test Suggestions</h2>
+                        </div>
                         <div class="chat-header-actions">
-                            <button id="new-chat-button" class="action-button" title="Start a new chat">
-                                <i class="codicon codicon-new-file"></i> New Chat
+                            <button id="new-chat-button" class="icon-button" title="Start a new chat">
+                                <i class="codicon codicon-add"></i>
                             </button>
                         </div>
                     </div>
