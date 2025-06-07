@@ -729,8 +729,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                             <h2 class="section-title">Test Suggestions</h2>
                         </div>
                         <div class="chat-header-actions">
-                            <button id="new-chat-button" class="icon-button" title="Start a new chat">
-                                <i class="codicon codicon-add"></i>
+                            <button id="new-chat-button" class="icon-button" title="Start a new chat (clears current conversation)">
+                                <i class="codicon codicon-trash"></i>
                             </button>
                         </div>
                     </div>
