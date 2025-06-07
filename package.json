@@ -65,7 +65,7 @@
         {
           "type": "webview",
           "id": "tdd-ai-companion.sidebar",
-          "name": "TDD Assistant",
+          "name": "",
           "icon": "media/icon.svg"
         }
       ]
