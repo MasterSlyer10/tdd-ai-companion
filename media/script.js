@@ -470,7 +470,6 @@
       featureInput.value = feature || "";
     }
   }
-
   // Debounce helper function
   function debounce(func, wait) {
     let timeout;
@@ -482,6 +481,29 @@
         func.apply(context, args);
       }, wait);
     };
+  }
+
+  // Helper function to truncate file names to a maximum length
+  function truncateFileName(fileName, maxLength = 40) {
+    if (fileName.length <= maxLength) {
+      return fileName;
+    }
+    
+    // Find the file extension
+    const lastDotIndex = fileName.lastIndexOf('.');
+    const extension = lastDotIndex !== -1 ? fileName.substring(lastDotIndex) : '';
+    const nameWithoutExtension = lastDotIndex !== -1 ? fileName.substring(0, lastDotIndex) : fileName;
+    
+    // Calculate how much space we have for the name part
+    const availableLength = maxLength - extension.length - 3; // 3 for "..."
+    
+    if (availableLength <= 0) {
+      // If extension is too long, just truncate the whole thing
+      return fileName.substring(0, maxLength - 3) + '...';
+    }
+    
+    // Truncate the name part and add ellipsis
+    return nameWithoutExtension.substring(0, availableLength) + '...' + extension;
   }
 
   // File tree handling
@@ -622,12 +644,11 @@
     iconElement.className = `codicon tree-item-icon ${
       node.type === "directory" ? "codicon-folder" : "codicon-file"
     }`;
-    itemElement.appendChild(iconElement);
-
-    // Add name
+    itemElement.appendChild(iconElement);    // Add name
     const nameElement = document.createElement("span");
-    nameElement.textContent = node.name;
-    itemElement.appendChild(nameElement);    // Add click handlers for the tree item itself (excluding the source/test file checkbox)
+    nameElement.textContent = truncateFileName(node.name);
+    nameElement.title = node.name; // Show full name on hover
+    itemElement.appendChild(nameElement);// Add click handlers for the tree item itself (excluding the source/test file checkbox)
     itemElement.addEventListener("click", (e) => {
       // Don't trigger folder toggle or file opening when clicking the source/test file checkbox
       if (e.target.classList.contains('tree-item-source-checkbox') || e.target.classList.contains('tree-item-test-checkbox')) {
@@ -1045,13 +1066,12 @@
       testFilesContainer.appendChild(chip);
     });
   }
-
   function createFileChip(name, path, type) {
     const chip = document.createElement("div");
     chip.className = "file-chip";
 
     const nameEl = document.createElement("span");
-    nameEl.textContent = name;
+    nameEl.textContent = truncateFileName(name);
     nameEl.title = path;
     chip.appendChild(nameEl);
 
