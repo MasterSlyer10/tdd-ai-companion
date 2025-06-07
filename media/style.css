@@ -1093,6 +1093,11 @@ body {
   border-radius: 3px;
 }
 
+#toggle-project-panel i {
+  transition: transform 0.3s ease, background-color 0.3s ease;
+  transform: rotate(0deg);
+}
+
 #toggle-project-panel:hover {
   background-color: var(--vscode-toolbar-hoverBackground);
 }

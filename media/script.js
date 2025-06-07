@@ -2621,16 +2621,16 @@
     projectPanel.classList.toggle('collapsed');
     
     // Update icon
-    if (toggleProjectPanelBtn) {
-      const icon = toggleProjectPanelBtn.querySelector('i');
-      if (icon) {
-        if (projectPanel.classList.contains('collapsed')) {
-          icon.className = 'codicon codicon-chevron-down';
-        } else {
-          icon.className = 'codicon codicon-chevron-up';
-        }
-      }
-    }
+    // if (toggleProjectPanelBtn) {
+    //   const icon = toggleProjectPanelBtn.querySelector('i');
+    //   if (icon) {
+    //     if (projectPanel.classList.contains('collapsed')) {
+    //       icon.className = 'codicon codicon-chevron-down';
+    //     } else {
+    //       icon.className = 'codicon codicon-chevron-up';
+    //     }
+    //   }
+    // }
     
     // Save state
     saveProjectPanelState();
@@ -2657,12 +2657,12 @@
         projectPanel.classList.add('collapsed');
         
         // Update icon
-        if (toggleProjectPanelBtn) {
-          const icon = toggleProjectPanelBtn.querySelector('i');
-          if (icon) {
-            icon.className = 'codicon codicon-chevron-down';
-          }
-        }
+        // if (toggleProjectPanelBtn) {
+        //   const icon = toggleProjectPanelBtn.querySelector('i');
+        //   if (icon) {
+        //     icon.className = 'codicon codicon-chevron-down';
+        //   }
+        // }
       }
     } catch (e) {
       console.error("Failed to load project panel state:", e);
