@@ -124,16 +124,6 @@ body {
   width: auto; /* Allow the container to size based on content */
 }
 
-/* Ensure header remains visible when panel is collapsed */
-.project-panel.collapsed .panel-group {
-  display: none;
-}
-
-/* Ensure header remains visible when panel is collapsed */
-.project-panel.collapsed .panel-group {
-  display: none;
-}
-
 .panel-group {
   display: flex;
   flex-direction: column;
@@ -1098,27 +1088,48 @@ body {
   height: calc(100vh - 32px);
 }
 
-/* Make project panel not flex grow */
 .project-panel {
   background-color: var(--background-elevated);
   border-radius: 4px;
-  padding: 0px 16px 16px 16px; /* Increased padding for more whitespace */
-  margin-bottom: 16px; /* Consistent with other margins */
-  border-bottom: 1px solid var(--border-color); /* Add a subtle divider */
-  flex: 0 0 auto; /* Don't grow or shrink by default */
-  overflow-y: auto; /* Make project panel scrollable if content overflows */
-  max-height: 50vh; /* Limit to half viewport height by default */
-  min-height: 0; /* Allow the element to shrink below its content size */
-  transition: max-height 0.3s ease-out, padding 0.3s ease-out,
-    margin 0.3s ease-out;
+  /*
+    padding-top: 0px;  <-- For the content area, assuming header is at the very top
+    padding-right: 16px;
+    padding-bottom: 16px; <-- For the content area
+    padding-left: 16px;
+  */
+  padding: 0px 16px 16px 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex: 0 0 auto;
+  overflow-y: auto; /* Allows content to scroll if it exceeds max-height */
+  max-height: 50vh;
+  min-height: 0; /* Important: Allows shrinking below intrinsic content height */
+  transition: max-height 1s ease-out, padding-top 1s ease-out,
+    /* Target individual padding properties */ padding-bottom 1s ease-out,
+    /* for better control */ margin-bottom 1s ease-out; /* Keep margin transition */
+  /* You could also just use 'padding 1s ease-out' if you change all padding values */
 }
 
 /* Collapsed project panel style */
 .project-panel.collapsed {
-  max-height: 56px; /* Just enough to show the header */
+  max-height: 56px; /* Target height for the header.
+                       This 56px should be the height of your header element itself. */
   overflow: hidden;
-  margin-bottom: 8px; /* Reduce margin when collapsed */
-  padding: 0px 16px 16px 16px; /* Increased padding for more whitespace */
+  margin-bottom: 8px;
+  /*
+    Animate vertical padding to 0 (or to a small value if your header needs some panel padding)
+    This is the KEY FIX.
+    Let's assume the header content itself is 56px tall and doesn't need additional
+    panel padding-top or padding-bottom in the collapsed state.
+  */
+  padding-top: 0px;
+  padding-bottom: 0px;
+  /* padding-left and padding-right can remain, or also animate if desired */
+  /* So the full shorthand would be: padding: 0px 16px 0px 16px; */
+  /* If your header itself (the content inside .project-panel that remains visible)
+     needs some padding, say 10px top and bottom, and its text is 36px high,
+     then max-height would be 56px, and padding-top/bottom here would be 10px.
+     But typically, the padding for the content area should go to 0. */
 }
 
 /* Style for the project panel toggle button */
