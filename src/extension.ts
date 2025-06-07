@@ -550,7 +550,7 @@ async function callGenerativeApi(
         console.log("[RAG Components] Embedding-derived Source Code Context:", JSON.stringify(relevantChunks.sourceCode, null, 2));
         console.log("[RAG Components] Embedding-derived Test Code Context:", JSON.stringify(relevantChunks.testCode, null, 2));
         
-        enhancedPromptContent = ragService.augmentPromptWithCodeContext(
+        enhancedPromptContent = await ragService.augmentPromptWithCodeContext(
           prompt, // Original query
           currentFeature,
           relevantChunks.sourceCode, // Pass source code chunks
