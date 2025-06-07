@@ -404,7 +404,6 @@
     }
     return false;
   }
-
   // Helper function to clean up test code validation
   function cleanupTestCodeValidation() {
     const wrapper = document.querySelector('.test-input-wrapper');
@@ -415,6 +414,62 @@
       wrapper.classList.remove('test-input-error-border');
       icon.style.display = 'none';
       input.placeholder = "Filter test files..."; // Restore original placeholder
+    }
+  }
+
+  // Helper function to show source file limit warning
+  function showSourceFileLimitWarning() {
+    let warningElement = document.getElementById('source-file-limit-warning');
+    
+    if (!warningElement) {
+      warningElement = document.createElement('div');
+      warningElement.id = 'source-file-limit-warning';
+      warningElement.className = 'file-warning-message file-limit-warning';
+      warningElement.innerHTML = '<i class="codicon codicon-warning"></i>Maximum of 5 source files can be selected.';
+      
+      // Insert after the source tree container
+      const sourceTreeContainer = document.querySelector('#source-file-tree');
+      if (sourceTreeContainer && sourceTreeContainer.parentNode) {
+        sourceTreeContainer.parentNode.insertBefore(warningElement, sourceTreeContainer.nextSibling);
+      }
+    }
+    
+    warningElement.style.display = 'flex';
+  }
+
+  // Helper function to hide source file limit warning
+  function hideSourceFileLimitWarning() {
+    const warningElement = document.getElementById('source-file-limit-warning');
+    if (warningElement) {
+      warningElement.style.display = 'none';
+    }
+  }
+
+  // Helper function to show test file limit warning
+  function showTestFileLimitWarning() {
+    let warningElement = document.getElementById('test-file-limit-warning');
+    
+    if (!warningElement) {
+      warningElement = document.createElement('div');
+      warningElement.id = 'test-file-limit-warning';
+      warningElement.className = 'file-warning-message file-limit-warning';
+      warningElement.innerHTML = '<i class="codicon codicon-warning"></i>Maximum of 5 test files can be selected.';
+      
+      // Insert after the test tree container
+      const testTreeContainer = document.querySelector('#test-file-tree');
+      if (testTreeContainer && testTreeContainer.parentNode) {
+        testTreeContainer.parentNode.insertBefore(warningElement, testTreeContainer.nextSibling);
+      }
+    }
+    
+    warningElement.style.display = 'flex';
+  }
+
+  // Helper function to hide test file limit warning
+  function hideTestFileLimitWarning() {
+    const warningElement = document.getElementById('test-file-limit-warning');
+    if (warningElement) {
+      warningElement.style.display = 'none';
     }
   }
 
@@ -628,12 +683,12 @@
       parentElement.appendChild(childrenContainer);
     }
   }
-
   // Add function to handle checkbox changes
   function handleCheckboxChange(node, isChecked, type) {
     const targetSet = type === 'source' ? checkedItems : checkedTestItems;
     const selectCommand = type === 'source' ? "selectSourceFile" : "selectTestFile";
     const deselectCommand = type === 'source' ? "deselectSourceFile" : "deselectTestFile";
+    const FILE_LIMIT = 5;
     let filesToUpdate = [];
 
     if (node.type === "file") {
@@ -641,6 +696,21 @@
     } else if (node.type === 'directory') {
       // For directories, get all descendant files
       filesToUpdate = getAllDescendantFiles(node);
+    }
+
+    // Check file limits when selecting files
+    if (isChecked) {
+      let filesToAdd = filesToUpdate.filter(filePath => !targetSet.has(filePath));
+      
+      if (targetSet.size + filesToAdd.length > FILE_LIMIT) {
+        // Show warning and prevent selection
+        if (type === 'source') {
+          showSourceFileLimitWarning();
+        } else {
+          showTestFileLimitWarning();
+        }
+        return; // Exit early without making changes
+      }
     }
 
     filesToUpdate.forEach(filePath => {
@@ -656,6 +726,17 @@
         }
       }
     });
+
+    // Update warning visibility based on current count
+    if (type === 'source') {
+      if (targetSet.size <= FILE_LIMIT) {
+        hideSourceFileLimitWarning();
+      }
+    } else {
+      if (targetSet.size <= FILE_LIMIT) {
+        hideTestFileLimitWarning();
+      }
+    }
 
     // Save checked items to state (now handles both source and test)
     saveCheckedItemsToState();
@@ -989,18 +1070,35 @@
 
     const removeBtn = document.createElement("span");
     removeBtn.className = "file-chip-remove";
-    removeBtn.innerHTML = '<i class="codicon codicon-close"></i>';
-    removeBtn.addEventListener("click", (e) => {
+    removeBtn.innerHTML = '<i class="codicon codicon-close"></i>';    removeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (type === "source") {
+        // Remove from local set
+        checkedItems.delete(path);
         vscode.postMessage({ command: "deselectSourceFile", path });
         // Also uncheck in the tree
         vscode.postMessage({ command: "uncheckFileTreeItem", path: path, treeType: 'source' });
+        // Update warning visibility
+        if (checkedItems.size <= 5) {
+          hideSourceFileLimitWarning();
+        }
       } else {
+        // Remove from local set
+        checkedTestItems.delete(path);
         vscode.postMessage({ command: "deselectTestFile", path });
         // Also uncheck in the tree
         vscode.postMessage({ command: "uncheckFileTreeItem", path: path, treeType: 'test' }); // Pass treeType
+        // Update warning visibility
+        if (checkedTestItems.size <= 5) {
+          hideTestFileLimitWarning();
+        }
       }
+      // Save state after removal
+      saveCheckedItemsToState();
+      saveCheckedItems();
+      // Re-render trees to update display
+      renderSourceFileTree();
+      renderTestFileTree();
     });
     chip.appendChild(removeBtn);
 
@@ -2435,8 +2533,7 @@
           checkedItems = new Set(message.paths);
           renderSourceFileTree(); // Corrected call
         }
-        break;
-      case "uncheckFileTreeItem":
+        break;      case "uncheckFileTreeItem":
         // Handle message to uncheck an item in the file tree for either source or test
         if (message.path && message.treeType) {
             const targetSet = message.treeType === 'source' ? checkedItems : checkedTestItems;
@@ -2456,6 +2553,14 @@
                     updateParentCheckboxStateInTree(itemElement, message.treeType); // Pass treeType
                 }
             }
+            
+            // Update warning visibility when files are unchecked
+            if (message.treeType === 'source' && targetSet.size <= 5) {
+                hideSourceFileLimitWarning();
+            } else if (message.treeType === 'test' && targetSet.size <= 5) {
+                hideTestFileLimitWarning();
+            }
+            
             saveCheckedItemsToState();
             saveCheckedItems();
             if (message.treeType === 'source') {

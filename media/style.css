@@ -1670,6 +1670,31 @@ body {
   line-height: 1.4;
 }
 
+.file-warning-message .codicon {
+  font-size: 14px; /* Adjust icon size */
+  flex-shrink: 0; /* Prevent icon from shrinking */
+}
+
+/* File limit warning styles */
+.file-limit-warning {
+  background-color: var(--vscode-inputValidation-warningBackground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  color: var(--vscode-inputValidation-warningForeground);
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.file-limit-warning .codicon {
+  color: var(--vscode-inputValidation-warningForeground);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
 .source-warning-message .codicon {
   font-size: 14px; /* Adjust icon size */
   flex-shrink: 0; /* Prevent icon from shrinking */
