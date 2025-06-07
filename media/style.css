@@ -1107,7 +1107,6 @@ body {
   transition: max-height 0.5s ease-in-out, padding-top 0.5s ease-in-out,
     /* Target individual padding properties */ padding-bottom 0.5s ease-in-out,
     /* for better control */ margin-bottom 0.5s ease-in-out; /* Keep margin transition */
-  /* You could also just use 'padding 1s ease-out' if you change all padding values */
 }
 
 /* Collapsed project panel style */
@@ -1804,4 +1803,46 @@ body {
   margin-left: 8px;
   flex-shrink: 0;
   display: none; /* Only show on error */
+}
+
+/* Missing files warning styles */
+.missing-files-warning {
+  background-color: var(--vscode-inputValidation-warningBackground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  color: var(--vscode-inputValidation-warningForeground);
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  animation: fadeInOut 5s ease-in-out;
+}
+
+.missing-files-warning .codicon {
+  color: var(--vscode-inputValidation-warningForeground);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  10%,
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.source-warning-message .codicon {
+  font-size: 14px; /* Adjust icon size */
+  flex-shrink: 0; /* Prevent icon from shrinking */
 }

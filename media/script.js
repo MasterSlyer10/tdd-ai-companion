@@ -1803,13 +1803,96 @@
     }
   }
 
+  // File validation functions to handle missing files
+  function fileExistsInTree(filePath, tree) {
+    if (!tree) return false;
+    
+    if (tree.type === 'file' && tree.path === filePath) {
+      return true;
+    }
+    
+    if (tree.type === 'directory' && tree.children) {
+      return tree.children.some(child => fileExistsInTree(filePath, child));
+    }
+    
+    return false;
+  }
+
+  function validateSelectedFiles() {
+    if (!fileTree) return;
+    
+    const missingFiles = [];
+    
+    // Check source files
+    for (const filePath of checkedItems) {
+      if (!fileExistsInTree(filePath, fileTree)) {
+        missingFiles.push(filePath);
+        checkedItems.delete(filePath);
+      }
+    }
+    
+    // Check test files
+    for (const filePath of checkedTestItems) {
+      if (!fileExistsInTree(filePath, fileTree)) {
+        missingFiles.push(filePath);
+        checkedTestItems.delete(filePath);
+      }
+    }
+    
+    // Show notification if files were removed
+    if (missingFiles.length > 0) {
+      showMissingFilesNotification(missingFiles);
+      
+      // Update display and save state
+      updateSourceFilesDisplay();
+      updateTestFilesDisplay();
+      saveCheckedItemsToState();
+      saveCheckedItems();
+    }
+  }
+
+  function showMissingFilesNotification(missingFiles) {
+    // Remove any existing notification
+    const existingNotification = document.getElementById('missing-files-notification');
+    if (existingNotification) {
+      existingNotification.remove();
+    }
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.id = 'missing-files-notification';
+    notification.className = 'missing-files-warning';
+    
+    // Create content
+    const fileNames = missingFiles.map(path => path.split(/[\/\\]/).pop()).join(', ');
+    const message = missingFiles.length === 1 
+      ? `File "${fileNames}" was moved or deleted and removed from selection.`
+      : `Files "${fileNames}" were moved or deleted and removed from selection.`;
+    
+    notification.innerHTML = `<i class="codicon codicon-warning"></i> ${message}`;
+    
+    // Insert notification at the top of the project panel
+    const projectPanel = document.querySelector('.project-panel');
+    if (projectPanel) {
+      projectPanel.insertBefore(notification, projectPanel.firstChild);
+    }
+    
+    // Auto-remove notification after 5 seconds
+    setTimeout(() => {
+      if (notification && notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 5000);
+  }
+
   // Handle messages from the extension
   window.addEventListener("message", (event) => {
     const message = event.data;
 
-    switch (message.command) {
-      case "updateFileTree":
+    switch (message.command) {      case "updateFileTree":
         fileTree = message.fileTree;
+        // Validate selected files against updated tree
+        validateSelectedFiles();
         renderSourceFileTree();
         renderTestFileTree();
         break;
@@ -1954,7 +2037,7 @@
         contentWrapper.className = "message-content-wrapper";
         contentWrapper.appendChild(contentElement);
 
-        // Add the actions container (initially empty)
+        // // Add the actions container (initially empty)
         const actionsElement = document.createElement("div");
         actionsElement.className = "message-actions";
         contentWrapper.appendChild(actionsElement);
@@ -2015,6 +2098,7 @@
         const hasAnswerMarker = currentRawText.includes('**Answer:**');
 
         // If we have both markers, we can split the content
+       
         if (hasThinkingMarker && hasAnswerMarker) {
           console.log("[Stream Debug] Found both thinking and answer markers");
           const thinkingStart = currentRawText.indexOf('**Thinking:**');
