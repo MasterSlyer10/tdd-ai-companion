@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { CodeChunk, parseFilesIntoChunks } from "./codeParser";
 import { EmbeddingService } from "./embeddingService";
+import { analyzeTestFiles } from "./testAnalyzer";
 
 /**
  * Service for handling Retrieval Augmented Generation (RAG) with code context
@@ -190,12 +191,29 @@ export class RAGService {
   /**
    * Augment a prompt with retrieved code context
    */
-  public augmentPromptWithCodeContext(
+  public async augmentPromptWithCodeContext(
     originalPrompt: string,
     feature: string,
     sourceCodeChunks: CodeChunk[],
     testCodeChunks: CodeChunk[]
-  ): string {
+  ): Promise<string> {
+    const untestedFunctions = await this.getUntestedFunctions();
+
+    // Filter sourceCodeChunks to only include chunks whose name is in the untestedFunctions set.
+    // For methods (e.g., Class.method), we check if either the full name or the class name is untested.
+    const filteredSourceCodeChunks = sourceCodeChunks.filter(chunk => {
+      if (untestedFunctions.has(chunk.name)) {
+        return true;
+      }
+      if (chunk.type === 'method') {
+        const classNameMatch = chunk.name.match(/^([a-zA-Z0-9_]+)\./);
+        if (classNameMatch && untestedFunctions.has(classNameMatch[1])) {
+          return true;
+        }
+      }
+      return false;
+    });
+
     // Helper to format chunks into a structured JSON
     const formatChunksToJson = (chunks: CodeChunk[], includeStructureAndHeaders: boolean = true) => {
       const codebaseJson: any = {
@@ -301,7 +319,7 @@ In every response, do the following:
 Constraints:
 - Suggest **only one test case** at a time.
 - Do **not include code or JSON** in your output.
-- Use only the 'Relevant Source Code' when suggesting tests.
+- Use only the 'Untested Source Code' when suggesting tests.
 - Use the 'Relevant Test Code' section only to avoid duplicates.
 - Keep your response conversational and helpful.
 
@@ -313,7 +331,7 @@ ${originalPrompt}
 Feature Being Developed:  
 ${feature}
 
-Relevant Source Code:  
+Untested Source Code:  
 \`\`\`json  
 ${formattedSourceCode}  
 \`\`\`
@@ -337,5 +355,43 @@ ${formattedTestCode}
       return absolutePath.substring(workspaceFolder.uri.fsPath.length + 1);
     }
     return absolutePath;
+  }
+
+  /**
+   * Identifies functions in source files that do not appear to have corresponding tests.
+   * @returns A Set of strings, where each string is the name of an untested function.
+   */
+  private async getUntestedFunctions(): Promise<Set<string>> {
+    // Find all relevant source code files
+    const sourceFiles = await vscode.workspace.findFiles('src/**/*.{ts,js,py,java}', '**/node_modules/**');
+    // Find all relevant test files
+    const testFiles = await vscode.workspace.findFiles('src/test/**/*.{ts,js,py,java}', '**/node_modules/**');
+
+    // Extract function/method/class names from source files
+    const allSourceChunks = await parseFilesIntoChunks(sourceFiles);
+    const sourceFunctionNames = new Set<string>();
+    allSourceChunks.forEach(chunk => {
+      if (chunk.type === 'function' || chunk.type === 'method' || chunk.type === 'class') {
+        // For methods (e.g., Class.method), we add both 'Class.method' and 'Class' to cover both cases.
+        sourceFunctionNames.add(chunk.name);
+        const classNameMatch = chunk.name.match(/^([a-zA-Z0-9_]+)\./);
+        if (classNameMatch) {
+          sourceFunctionNames.add(classNameMatch[1]); // Add the class name itself
+        }
+      }
+    });
+
+    // Analyze test files to get names of functions that are tested
+    const testedFunctionNames = analyzeTestFiles(testFiles.map(uri => uri.fsPath));
+
+    // Determine which source functions are not covered by tests
+    const untestedFunctions = new Set<string>();
+    sourceFunctionNames.forEach(funcName => {
+      if (!testedFunctionNames.has(funcName)) {
+        untestedFunctions.add(funcName);
+      }
+    });
+
+    return untestedFunctions;
   }
 }
