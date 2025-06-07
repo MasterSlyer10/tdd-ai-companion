@@ -673,10 +673,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                             </div>
                         </div>
 
-                        <div class="file-warning-message">
+                        <!-- <div class="file-warning-message">
                             <i class="codicon codicon-warning"></i>
                             <span>For best results, please select only the files related to your question. Sending too many files may reduce accuracy and slow down responses.</span>
-                        </div>
+                        </div> -->
 
                         <!-- Source File Explorer Tree View -->
                         <div class="tree-view-container">
