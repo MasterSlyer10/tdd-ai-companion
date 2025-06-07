@@ -735,12 +735,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                         </div>
                     </div>
                     <div class="chat-container">
-                        <div id="chat-messages" class="messages-container"></div>
-                        <div class="input-container">
-                            <div class="action-buttons">
-                                <button id="suggest-test-button" class="action-button" title="Generate test suggestions">
-                                    <i class="codicon codicon-lightbulb"></i> Suggest Tests
+                        <div id="chat-messages" class="messages-container"></div>                        <div class="input-container">
+                            <div class="suggest-test-container">
+                                <button id="suggest-test-button" class="suggest-test-button" title="Suggest a test case">
+                                    Suggest Test Case
                                 </button>
+                            </div>
+                            <div class="action-buttons">
                                 <textarea id="chat-input" class="message-input" placeholder="Enter your message..."></textarea>
                                 <button id="send-button" class="send-button" title="Send Request">
                                   <i class="codicon codicon-send"></i>

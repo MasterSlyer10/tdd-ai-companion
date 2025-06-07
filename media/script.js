@@ -251,27 +251,18 @@
       sendButton.addEventListener("click", handleSendOrStopClick); // Unified handler
     } else {
       console.error("Send button not found");
-    }
-
-    if (suggestTestButton) {
-      // Modify the suggest test button to be an icon with hover text
-      suggestTestButton.className = "suggest-test-button-icon";
-      suggestTestButton.innerHTML = '<i class="codicon codicon-lightbulb"></i>';
-      suggestTestButton.title = "Suggest test cases"; // Tooltip handled by CSS :after
-
+    }    if (suggestTestButton) {
       suggestTestButton.addEventListener("click", () => {
         console.log("Suggest test button clicked");
-        sendSuggestTestCaseMessage(); // Changed to use the defined function
+        populateTestCasePrompt(); // Changed to populate input instead of auto-sending
       });
     } else {
       console.error("Suggest test button not found");
-    }
-
-    // Add event listener for the new suggest test case button
+    }    // Add event listener for the new suggest test case button
     // if (suggestTestCaseButton) {
     //   suggestTestCaseButton.addEventListener("click", () => {
     //     console.log("Suggest test case button clicked");
-    //     sendSuggestTestCaseMessage(); // New function to handle this
+    //     populateTestCasePrompt(); // Changed to populate input instead of auto-sending
     //   });
     // } else {
     //   console.error("Suggest test case button not found");
@@ -1233,71 +1224,16 @@
       promptId: promptId, // Include the prompt ID
     });
   }
-
-  // New function for the "Suggest Test Case" button
-  function sendSuggestTestCaseMessage() {
-    let hasValidationError = false;
-
-    // Check if feature is defined
-    if (!currentFeature) {
-      if (showFeatureValidation()) {
-        hasValidationError = true;
-      }
-    }
-
-    // Check if source files are selected
-    if (sourceFiles.length === 0) {
-      if (showSourceCodeValidation()) {
-        hasValidationError = true;
-      }
-    }
-
-    // Check if test files are selected
-    if (testFiles.length === 0) {
-      if (showTestCodeValidation()) {
-        hasValidationError = true;
-      }
-    }
-
-    if (hasValidationError) {
-      return; // Don't proceed if any validation was shown
-    }
-  
-     // Send a predefined message for suggesting a test case
-    const predefinedMessage =
-      "Suggest a new test case for my current implementation"; // Same message as the lightbulb for now    // Don't set in the input field since we're going to send it directly
+  // New function to populate the input field with test case prompt
+  function populateTestCasePrompt() {
+    const predefinedMessage = "Suggest a new test case for my current implementation";
     
-    console.log("Sending test case suggestion request with message:", predefinedMessage);
-    setSendButtonState("stop"); // Change to Stop button
-    isRequestCancelled = false; // Reset cancellation flag for new request
-
-    // Generate a unique prompt ID for this request
-    const promptId = Date.now().toString();
-    activePromptId = promptId; // Set the active prompt ID
-
-    // Add message to UI
-    addMessageToChat(predefinedMessage, true, promptId); // Pass promptId to addMessageToChat
-
-    // Make sure input field is clear
     if (chatInput) {
-      chatInput.value = "";
+      chatInput.value = predefinedMessage;
+      chatInput.focus();
+      // Set cursor at the end of the text
+      chatInput.setSelectionRange(predefinedMessage.length, predefinedMessage.length);
     }
-
-    // Display loading indicator
-    const loadingElement = document.createElement("div");
-    loadingElement.className = "loading-indicator";
-    loadingElement.textContent = "Generating response...";
-    chatMessages.appendChild(loadingElement);
-
-    // Scroll to bottom
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-    // Send message to extension with the prompt ID
-    vscode.postMessage({
-      command: "requestTestSuggestion",
-      message: predefinedMessage,
-      promptId: promptId, // Include the prompt ID
-    });
   }
 
   // Add message to chat UI

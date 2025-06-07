@@ -254,52 +254,36 @@ body {
   border: none; /* Ensure no border on focus/hover/active */
 }
 
-/* Style for the lightbulb icon button */
-.suggest-test-button-icon {
-  width: 32px;
-  height: 32px;
+/* Suggest Test Case Button Container */
+.suggest-test-container {
+  margin-bottom: 6px;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Style for the suggest test case button - subtle and small */
+.suggest-test-button {
   background-color: transparent;
-  color: var(--text-secondary); /* Subtle color */
-  border: none;
-  cursor: pointer;
-  padding: 0; /* Remove padding */
-  flex-shrink: 0; /* Prevent shrinking */
-  position: static; /* Change from absolute to static */
-}
-
-.suggest-test-button-icon:hover {
-  background-color: var(--button-hover);
-  color: var(--button-foreground); /* More prominent on hover */
-}
-
-.suggest-test-button-icon .codicon {
-  font-size: 18px; /* Adjust icon size */
-}
-
-/* Tooltip for the lightbulb button */
-.suggest-test-button-icon::after {
-  content: "Suggest test cases";
-  position: absolute;
-  bottom: 100%; /* Position above the button */
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: var(--vscode-tooltip-background);
-  color: var(--vscode-tooltip-foreground);
-  padding: 4px 8px;
-  border-radius: 4px;
+  color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 3px;
+  padding: 3px 8px;
   font-size: 11px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none; /* Allow clicks through the tooltip */
-  transition: opacity 0.2s ease-in-out;
-  margin-bottom: 5px; /* Space between button and tooltip */
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0.7;
 }
 
-.suggest-test-button-icon:hover::after {
+.suggest-test-button:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
   opacity: 1;
+  border-color: var(--vscode-focusBorder);
+}
+
+.suggest-test-button:active {
+  background-color: var(--vscode-toolbar-activeBackground);
+  transform: translateY(1px);
 }
 
 /* Style for the new suggest test case button */
@@ -1084,7 +1068,7 @@ body {
   max-height: 56px; /* Just enough to show the header */
   overflow: hidden;
   margin-bottom: 8px; /* Reduce margin when collapsed */
-  padding: 12px 16px 0; /* Adjust padding for collapsed state */
+  padding: 0px 16px 16px 16px; /* Increased padding for more whitespace */
 }
 
 /* Style for the project panel toggle button */
