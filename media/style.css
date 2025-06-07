@@ -564,7 +564,7 @@ body {
 .tree-item {
   display: flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 2px 6px;
   cursor: pointer;
   white-space: nowrap;
   position: relative;
@@ -782,14 +782,15 @@ body {
 }
 
 /* Adjust padding for tree items to account for the new icon */
-.tree-item {
+/* removed since no more icons used */
+/* .tree-item {
   display: flex;
   align-items: center;
-  padding: 2px 4px; /* Keep consistent padding */
+  padding: 2px 4px;
   cursor: pointer;
   white-space: nowrap;
   position: relative;
-}
+} */
 
 /* Make the tree view taller to accommodate more items */
 .tree-view-container {
