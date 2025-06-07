@@ -685,51 +685,100 @@ body {
   background-color: var(--vscode-list-hoverBackground);
 }
 
-/* Styles for the new source file icon */
-.tree-item-source-icon {
+/* Styles for the source file checkbox */
+.tree-item-source-checkbox {
   margin: 0 4px 0 0;
   cursor: pointer;
-  font-size: 14px; /* Match the size of the old checkbox */
-  color: var(--vscode-icon-foreground); /* Default gray color */
-  opacity: 0.6; /* Slightly faded when unchecked */
-  transition: color 0.2s ease, opacity 0.2s ease;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--vscode-checkbox-border);
+  border-radius: 2px;
+  background-color: var(--vscode-checkbox-background);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
-.tree-item-source-icon:hover {
-  opacity: 1; /* Full opacity on hover */
+.tree-item-source-checkbox:hover {
+  border-color: var(--vscode-checkbox-foreground);
 }
 
-.tree-item-source-icon.checked {
-  color: var(--primary-color); /* Blue when checked */
-  opacity: 1; /* Full opacity when checked */
+.tree-item-source-checkbox.checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
-.tree-item-source-icon.indeterminate {
+.tree-item-source-checkbox.checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  position: absolute;
+  top: 1px;
+}
+
+.tree-item-source-checkbox.indeterminate {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.tree-item-source-checkbox.indeterminate::after {
+  content: "";
+  width: 8px;
+  height: 2px;
+  background-color: white;
+  position: absolute;
+}
+
+/* Styles for the test file checkbox */
+.tree-item-test-checkbox {
   margin: 0 4px 0 0;
   cursor: pointer;
-  font-size: 14px;
-  color: var(--vscode-icon-foreground); /* Default gray color */
-  opacity: 0.6;
-  transition: color 0.2s ease, opacity 0.2s ease;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--vscode-checkbox-border);
+  border-radius: 2px;
+  background-color: var(--vscode-checkbox-background);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
-/* Styles for the new test file icon */
-.tree-item-test-icon {
-  margin: 0 4px 0 0;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--vscode-icon-foreground); /* Default gray color */
-  opacity: 0.6;
-  transition: color 0.2s ease, opacity 0.2s ease;
+.tree-item-test-checkbox:hover {
+  border-color: var(--vscode-checkbox-foreground);
 }
 
-.tree-item-test-icon:hover {
-  opacity: 1;
+.tree-item-test-checkbox.checked {
+  background-color: var(--vscode-terminal-ansiGreen);
+  border-color: var(--vscode-terminal-ansiGreen);
 }
 
-.tree-item-test-icon.checked {
-  color: var(--vscode-terminal-ansiGreen); /* Green when checked */
-  opacity: 1;
+.tree-item-test-checkbox.checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  position: absolute;
+  top: 1px;
+}
+
+.tree-item-test-checkbox.indeterminate {
+  background-color: var(--vscode-terminal-ansiGreen);
+  border-color: var(--vscode-terminal-ansiGreen);
+}
+
+.tree-item-test-checkbox.indeterminate::after {
+  content: "";
+  width: 8px;
+  height: 2px;
+  background-color: white;
+  position: absolute;
 }
 
 /* Adjust padding for tree items to account for the new icon */

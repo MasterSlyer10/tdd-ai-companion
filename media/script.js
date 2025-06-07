@@ -546,54 +546,52 @@
       const indentElement = document.createElement("div");
       indentElement.className = "tree-item-indent";
       itemElement.appendChild(indentElement);
-    }
-
-    // Add source file icon (replaces checkbox) if it's the source tree
+    }    // Add source file checkbox if it's the source tree
     if (treeType === 'source') {
-      const sourceFileIcon = document.createElement("i");
-      sourceFileIcon.className = "codicon codicon-file-code tree-item-source-icon";
-      sourceFileIcon.dataset.path = node.path; // Store path for easy lookup
+      const sourceFileCheckbox = document.createElement("div");
+      sourceFileCheckbox.className = "tree-item-source-checkbox";
+      sourceFileCheckbox.dataset.path = node.path; // Store path for easy lookup
 
       // Determine initial state and apply appropriate class
       const initialState = getCheckboxState(node, 'source'); // Ensure type is passed
       if (initialState === 'checked') {
-          sourceFileIcon.classList.add('checked');
+          sourceFileCheckbox.classList.add('checked');
       } else if (initialState === 'indeterminate') {
-          sourceFileIcon.classList.add('indeterminate');
+          sourceFileCheckbox.classList.add('indeterminate');
       }
 
-      sourceFileIcon.addEventListener("click", (e) => {
+      sourceFileCheckbox.addEventListener("click", (e) => {
           e.stopPropagation(); // Prevent parent click handlers from firing
           // Toggle the checked state
-          const isChecked = !sourceFileIcon.classList.contains('checked');
+          const isChecked = !sourceFileCheckbox.classList.contains('checked');
           handleCheckboxChange(node, isChecked, 'source'); // Pass type
-          // The renderFileTree() call in handleCheckboxChange will re-render and update the icon's state
+          // The renderFileTree() call in handleCheckboxChange will re-render and update the checkbox state
       });
-      itemElement.appendChild(sourceFileIcon);
+      itemElement.appendChild(sourceFileCheckbox);
     }
 
-    // Add test file icon (beaker) if it's the test tree
+    // Add test file checkbox if it's the test tree
     if (treeType === 'test') {
-      const testFileIcon = document.createElement("i");
-      testFileIcon.className = "codicon codicon-beaker tree-item-test-icon";
-      testFileIcon.dataset.path = node.path; // Store path for easy lookup
+      const testFileCheckbox = document.createElement("div");
+      testFileCheckbox.className = "tree-item-test-checkbox";
+      testFileCheckbox.dataset.path = node.path; // Store path for easy lookup
 
-      // Determine initial state and apply appropriate class for test file icon
+      // Determine initial state and apply appropriate class for test file checkbox
       const initialState = getCheckboxState(node, 'test'); // Pass type
       if (initialState === 'checked') {
-          testFileIcon.classList.add('checked');
+          testFileCheckbox.classList.add('checked');
       } else if (initialState === 'indeterminate') {
-          testFileIcon.classList.add('indeterminate');
+          testFileCheckbox.classList.add('indeterminate');
       }
 
-      testFileIcon.addEventListener("click", (e) => {
+      testFileCheckbox.addEventListener("click", (e) => {
           e.stopPropagation(); // Prevent parent click handlers from firing
           // Toggle the checked state
-          const isChecked = !testFileIcon.classList.contains('checked');
+          const isChecked = !testFileCheckbox.classList.contains('checked');
           handleCheckboxChange(node, isChecked, 'test'); // Pass type
-          // The renderFileTree() call in handleCheckboxChange will re-render and update the icon's state
+          // The renderFileTree() call in handleCheckboxChange will re-render and update the checkbox state
       });
-      itemElement.appendChild(testFileIcon);
+      itemElement.appendChild(testFileCheckbox);
     }
 
 
@@ -629,12 +627,10 @@
     // Add name
     const nameElement = document.createElement("span");
     nameElement.textContent = node.name;
-    itemElement.appendChild(nameElement);
-
-    // Add click handlers for the tree item itself (excluding the source/test file icon)
+    itemElement.appendChild(nameElement);    // Add click handlers for the tree item itself (excluding the source/test file checkbox)
     itemElement.addEventListener("click", (e) => {
-      // Don't trigger folder toggle or file opening when clicking the source/test file icon
-      if (e.target.classList.contains('tree-item-source-icon') || e.target.classList.contains('tree-item-test-icon')) {
+      // Don't trigger folder toggle or file opening when clicking the source/test file checkbox
+      if (e.target.classList.contains('tree-item-source-checkbox') || e.target.classList.contains('tree-item-test-checkbox')) {
         return;
       }
       if (node.type === "directory") {
@@ -2477,15 +2473,14 @@
 
             targetSet.delete(message.path);
 
-            // Find the corresponding tree item in the DOM and update its state
-            const itemElement = targetTreeElement.querySelector(`.tree-item[data-path="${message.path}"]`);
+            // Find the corresponding tree item in the DOM and update its state            const itemElement = targetTreeElement.querySelector(`.tree-item[data-path="${message.path}"]`);
             if (itemElement) {
-                const icon = itemElement.querySelector(
-                    message.treeType === 'source' ? '.tree-item-source-icon' : '.tree-item-test-icon'
+                const checkbox = itemElement.querySelector(
+                    message.treeType === 'source' ? '.tree-item-source-checkbox' : '.tree-item-test-checkbox'
                 );
-                if (icon) {
-                    icon.classList.remove('checked', 'indeterminate');
-                    // Also update parent icon states
+                if (checkbox) {
+                    checkbox.classList.remove('checked', 'indeterminate');
+                    // Also update parent checkbox states
                     updateParentCheckboxStateInTree(itemElement, message.treeType); // Pass treeType
                 }
             }
@@ -2583,14 +2578,13 @@
               const parentPath = parentItemElement.dataset.path;
               const parentNode = findNodeByPath(parentPath, fileTree); // Find the corresponding node in the data
 
-              if (parentNode) {
-                  const parentIcon = parentItemElement.querySelector(
-                      treeType === 'source' ? '.tree-item-source-icon' : '.tree-item-test-icon'
+              if (parentNode) {                  const parentCheckbox = parentItemElement.querySelector(
+                      treeType === 'source' ? '.tree-item-source-checkbox' : '.tree-item-test-checkbox'
                   );
-                  if (parentIcon) {
+                  if (parentCheckbox) {
                       const parentState = getCheckboxState(parentNode, treeType); // Pass treeType
-                      parentIcon.classList.toggle('checked', parentState === 'checked');
-                      parentIcon.classList.toggle('indeterminate', parentState === 'indeterminate');
+                      parentCheckbox.classList.toggle('checked', parentState === 'checked');
+                      parentCheckbox.classList.toggle('indeterminate', parentState === 'indeterminate');
                   }
               }
               currentElement = parentItemElement.parentElement; // Move up to the next parent's children container
