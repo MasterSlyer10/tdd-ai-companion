@@ -1842,7 +1842,389 @@ body {
   }
 }
 
-.source-warning-message .codicon {
-  font-size: 14px; /* Adjust icon size */
-  flex-shrink: 0; /* Prevent icon from shrinking */
+/* Indexing Status UI Styles */
+
+/* Main indexing status container */
+.indexing-status-display {
+  padding: 12px 16px;
+  margin: 8px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--background-elevated);
+  font-size: 12px;
+  transition: all 0.3s ease;
+}
+
+/* Header row with status and controls */
+.indexing-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.indexing-status-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.indexing-status-title .codicon {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+/* Control buttons container */
+.indexing-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.indexing-control-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.indexing-control-button:hover {
+  background-color: var(--background-card);
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+}
+
+.indexing-control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.indexing-control-button .codicon {
+  font-size: 12px;
+}
+
+/* Primary action button styling */
+.indexing-control-button.primary {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.indexing-control-button.primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+/* Status information rows */
+.indexing-status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.indexing-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.indexing-status-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.indexing-status-value {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+}
+
+/* Status badges */
+.indexing-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.indexing-status-badge.ready {
+  background-color: var(--vscode-terminal-ansiGreen, #16a085);
+  color: white;
+}
+
+.indexing-status-badge.indexing {
+  background-color: var(--vscode-terminal-ansiYellow, #f39c12);
+  color: var(--vscode-editor-background, #1e1e1e);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.indexing-status-badge.error {
+  background-color: var(--vscode-terminal-ansiRed, #e74c3c);
+  color: white;
+}
+
+.indexing-status-badge.disabled {
+  background-color: var(--text-secondary);
+  color: var(--background-card);
+}
+
+.indexing-status-badge .codicon {
+  font-size: 10px;
+}
+
+/* Progress container */
+.indexing-progress-container {
+  margin: 8px 0;
+  display: none; /* Hidden by default, shown during indexing */
+}
+
+.indexing-progress-container.visible {
+  display: block;
+}
+
+/* Progress bar */
+.indexing-progress-bar {
+  width: 100%;
+  height: 6px;
+  background-color: var(
+    --vscode-progressBar-background,
+    rgba(128, 128, 128, 0.2)
+  );
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.indexing-progress-fill {
+  height: 100%;
+  background-color: var(--vscode-progressBar-foreground, var(--primary-color));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+/* Indeterminate progress animation */
+.indexing-progress-fill.indeterminate {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--vscode-progressBar-foreground, var(--primary-color)),
+    transparent
+  );
+  background-size: 50% 100%;
+  animation: progress-indeterminate 1.5s infinite;
+  width: 100% !important;
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    background-position: -50% 0;
+  }
+  100% {
+    background-position: 150% 0;
+  }
+}
+
+/* Progress text */
+.indexing-progress-text {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+/* Auto-indexing toggle switch */
+.auto-indexing-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-indexing-switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background-color: var(--vscode-checkbox-background);
+  border: 1px solid var(--vscode-checkbox-border);
+  border-radius: 9px;
+  transition: all 0.2s ease;
+}
+
+.auto-indexing-switch.enabled {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.auto-indexing-switch-thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.auto-indexing-switch.enabled .auto-indexing-switch-thumb {
+  transform: translateX(14px);
+}
+
+.auto-indexing-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Feedback messages */
+.indexing-feedback {
+  padding: 6px 10px;
+  margin: 4px 0;
+  border-radius: 3px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: fadeInSlide 0.3s ease-out;
+}
+
+.indexing-feedback.success {
+  background-color: var(--vscode-inputValidation-infoBackground);
+  border: 1px solid var(--vscode-inputValidation-infoBorder);
+  color: var(--vscode-inputValidation-infoForeground);
+}
+
+.indexing-feedback.error {
+  background-color: var(--vscode-inputValidation-errorBackground);
+  border: 1px solid var(--vscode-inputValidation-errorBorder);
+  color: var(--vscode-inputValidation-errorForeground);
+}
+
+.indexing-feedback .codicon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+@keyframes fadeInSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulse glow animation for active states */
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 4px rgba(243, 156, 18, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(243, 156, 18, 0);
+  }
+}
+
+/* Compact mode for smaller displays */
+@media (max-width: 400px) {
+  .indexing-status-display {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .indexing-status-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .indexing-controls {
+    align-self: stretch;
+    justify-content: space-between;
+  }
+
+  .indexing-control-button {
+    flex: 1;
+    justify-content: center;
+    padding: 6px 4px;
+  }
+}
+
+/* Status display when collapsed/minimal */
+.indexing-status-display.minimal {
+  padding: 6px 12px;
+  margin: 4px 0;
+}
+
+.indexing-status-display.minimal .indexing-status-info {
+  display: none;
+}
+
+.indexing-status-display.minimal .indexing-progress-container {
+  margin: 4px 0;
+}
+
+/* Integration with existing project panel styles */
+.project-panel .indexing-status-display {
+  margin: 12px 0 8px 0;
+  background-color: var(--background-card);
+}
+
+.project-panel.collapsed .indexing-status-display {
+  display: none;
+}
+
+/* Accessibility improvements */
+.indexing-control-button:focus {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.auto-indexing-toggle:focus-within .auto-indexing-switch {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+/* High contrast mode adjustments */
+@media (prefers-contrast: high) {
+  .indexing-status-badge {
+    border: 1px solid currentColor;
+  }
+
+  .indexing-progress-bar {
+    border: 1px solid var(--text-primary);
+  }
+
+  .auto-indexing-switch {
+    border-width: 2px;
+  }
 }

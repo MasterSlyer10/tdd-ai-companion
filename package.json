@@ -82,11 +82,79 @@
           "type": "string",
           "default": "",
           "description": "API key for Pinecone vector database"
-        },
-        "tddAICompanion.userId": {
+        },        "tddAICompanion.userId": {
           "type": "string",
           "default": "",
           "description": "Unique identifier for the user (automatically generated if not set)"
+        },
+        "tddAICompanion.autoIndexing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic indexing of file changes"
+        },
+        "tddAICompanion.indexingStrategy": {
+          "type": "string",
+          "enum": ["incremental", "full", "smart"],
+          "default": "smart",
+          "enumDescriptions": [
+            "Only index changed files",
+            "Reindex entire codebase on any change",
+            "Intelligently choose between incremental and full indexing"
+          ],
+          "description": "Strategy for handling file changes in the index"
+        },
+        "tddAICompanion.indexingDelay": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 10000,
+          "description": "Delay in milliseconds before indexing file changes (debounce)"
+        },
+        "tddAICompanion.maxIndexSize": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1000,
+          "maximum": 50000,
+          "description": "Maximum number of chunks to maintain in the index"
+        },
+        "tddAICompanion.autoCleanup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically clean up index when tasks are completed"
+        },
+        "tddAICompanion.cleanupThreshold": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 365,
+          "description": "Days after which to clean up old indexed content"
+        },
+        "tddAICompanion.indexIncludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py", "**/*.java", "**/*.cs", "**/*.cpp", "**/*.c", "**/*.h"],
+          "description": "File patterns to include in automatic indexing"
+        },
+        "tddAICompanion.indexExcludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.git/**", "**/coverage/**", "**/*.min.js", "**/*.test.*", "**/*.spec.*"],
+          "description": "File patterns to exclude from automatic indexing"
+        },        "tddAICompanion.enableProgressNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show progress notifications during indexing operations"
+        },
+        "tddAICompanion.batchSize": {
+          "type": "number",
+          "default": 15,
+          "minimum": 5,
+          "maximum": 50,
+          "description": "Number of code chunks to process in each batch for embedding generation"
         }
       }
     }

@@ -15,6 +15,12 @@ This extension uses Google's Gemini AI and RAG (Retrieval-Augmented Generation) 
 - **Project Setup Assistance**: Configure your project for effective TDD
 - **RAG-Enhanced Context**: Uses Retrieval-Augmented Generation to provide more accurate and relevant suggestions
 - **Dedicated Sidebar Interface**: Access all TDD AI Companion features from a convenient sidebar
+- **🚀 Auto-Indexing System**: Intelligent automatic management of your codebase embeddings
+  - **Smart File Watching**: Automatically detects file changes and updates embeddings
+  - **Configurable Strategies**: Choose between smart, incremental, or full indexing approaches
+  - **Real-time Status**: Monitor indexing progress and index statistics
+  - **Manual Controls**: Force updates or disable auto-indexing as needed
+  - **Pattern-based Filtering**: Include/exclude specific file patterns from indexing
 
 <!-- Screenshot will be added in future releases -->
 <!-- No screenshot available yet -->
@@ -62,9 +68,26 @@ To use this extension, you'll need:
 
 This extension contributes the following settings:
 
+### Core Settings
+
 - `tddAICompanion.geminiApiKey`: API key for Google Gemini
 - `tddAICompanion.pineconeApiKey`: API key for Pinecone vector database
 - `tddAICompanion.userId`: Unique identifier for the user (automatically generated if not set)
+
+### Auto-Indexing Settings
+
+- `tddAiCompanion.autoIndexing.enabled`: Enable/disable automatic indexing (default: true)
+- `tddAiCompanion.autoIndexing.strategy`: Indexing strategy - "smart", "incremental", or "full" (default: "smart")
+- `tddAiCompanion.autoIndexing.delay`: Debounce delay in milliseconds (default: 2000)
+- `tddAiCompanion.autoIndexing.includePatterns`: File patterns to include in indexing
+- `tddAiCompanion.autoIndexing.excludePatterns`: File patterns to exclude from indexing
+- `tddAiCompanion.autoIndexing.maxFileSize`: Maximum file size to index in bytes (default: 1MB)
+- `tddAiCompanion.autoIndexing.batchSize`: Number of code chunks to process per batch for optimal performance (default: 15)
+- `tddAiCompanion.autoIndexing.autoCleanup`: Automatically remove deleted files from index (default: true)
+- `tddAiCompanion.autoIndexing.trackChanges`: Enable file change tracking with checksums (default: true)
+- `tddAiCompanion.autoIndexing.showProgress`: Show detailed progress information (default: true)
+
+> 📚 **For detailed auto-indexing documentation**, see [AUTO_INDEXING_SYSTEM.md](./AUTO_INDEXING_SYSTEM.md)
 
 ## Getting Started
 
@@ -84,9 +107,16 @@ This extension contributes the following settings:
 4. **Access the TDD AI Companion sidebar** from the VS Code activity bar
 
 5. **Setup your project**:
+
    - Define the feature you're working on
    - Select source files and test files
-   - Index your codebase for RAG if desired
+   - The auto-indexing system will automatically manage your codebase embeddings
+   - Monitor indexing status in the sidebar
+
+6. **Configure auto-indexing** (optional):
+   - Use the auto-indexing toggle in the sidebar to enable/disable automatic updates
+   - Adjust settings in VS Code preferences for indexing behavior
+   - Use manual controls when needed (Index Now, Clear Index)
 
 ## How to Use
 
@@ -113,8 +143,21 @@ This extension contributes the following settings:
 - **TDD AI: Update Source Files**: Get suggestions for implementation code
 - **TDD AI: Update Test Files**: Get suggestions for improving your tests
 - **TDD AI: Update Current Feature**: Change the feature you're working on
-- **TDD AI: Index Codebase for RAG**: Create/update a vector index of your code
-- **TDD AI: Clear Codebase Index**: Remove the RAG index
+- **TDD AI: Index Files**: Manually trigger indexing of selected files
+- **TDD AI: Clear Index**: Remove all entries from the vector index
+- **TDD AI: Toggle Auto-Indexing**: Enable/disable automatic indexing
+
+### Auto-Indexing Features
+
+The extension now includes intelligent auto-indexing capabilities:
+
+- **Automatic Updates**: File changes are automatically detected and indexed
+- **Smart Strategies**: Choose how the system handles updates (smart/incremental/full)
+- **Real-time Monitoring**: View indexing status, progress, and statistics in the sidebar
+- **Manual Override**: Force indexing or disable auto-updates when needed
+- **Pattern Filtering**: Configure which files to include or exclude from indexing
+
+For complete auto-indexing documentation, see [AUTO_INDEXING_SYSTEM.md](./AUTO_INDEXING_SYSTEM.md).
 
 ## Known Issues
 
@@ -131,6 +174,14 @@ This extension contributes the following settings:
 - Gemini AI integration
 - RAG capabilities for contextual understanding
 - Sidebar interface for interaction
+- **🚀 NEW: Comprehensive Auto-Indexing System**
+  - Intelligent automatic management of codebase embeddings
+  - Smart file watching with configurable patterns and strategies
+  - Real-time status monitoring and progress tracking
+  - Manual controls with auto-indexing toggle
+  - 10 comprehensive configuration options for fine-tuning
+  - Pattern-based file filtering and change detection
+  - Debounced updates and batch processing for optimal performance
 
 ---
 

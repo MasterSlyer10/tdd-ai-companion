@@ -339,16 +339,18 @@ export class EmbeddingService {
       console.warn("Using fallback zero embedding due to error");
       return new Array(this.dimension).fill(0);
     }
-  }
-
-  /**
+  }  /**
    * Store code chunks in Pinecone
    * @param chunks The code chunks to store
    * @param namespace The namespace to store the chunks under (e.g., "source_code", "test_code")
+   * @param batchSize The number of chunks to process in each batch (default: 15)
+   * @param progressCallback Optional callback for progress updates
    */
   public async storeCodeChunks(
     chunks: CodeChunk[],
-    namespace: string
+    namespace: string,
+    batchSize: number = 15,
+    progressCallback?: (processed: number, total: number, currentBatch: number) => void
   ): Promise<void> {
     if (!this.initialized) {
       const success = await this.initialize();
@@ -369,17 +371,16 @@ export class EmbeddingService {
 
       console.log(
         `Starting to index ${chunks.length} code chunks in namespace '${namespace}'...`
-      );
-      const index = this.pineconeClient.index(this.indexName);
+      );      const index = this.pineconeClient.index(this.indexName);
 
       // Process chunks in batches to avoid rate limits
-      const batchSize = 5; // Smaller batch size to avoid rate limits
+      // Use the provided batchSize parameter instead of hardcoded value
       for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
         console.log(
           `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
             chunks.length / batchSize
-          )}, size: ${batch.length}`
+          )}, size: ${batch.length} (batchSize: ${batchSize})`
         );
 
         try {
@@ -466,24 +467,30 @@ export class EmbeddingService {
               }`
             );
             continue;
-          }
-
-          // Store embeddings in Pinecone
+          }          // Store embeddings in Pinecone
           console.log(
-            `Upserting ${vectors.length} vectors to Pinecone in namespace '${namespace}'`
+            `Upserting ${vectors.length} vectors to Pinecone in namespace '${namespace}' (batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(chunks.length / batchSize)})`
           );
           await index.upsert(vectors as any[]);
 
-          // Show progress
-          vscode.window.showInformationMessage(
-            `Stored ${i + batch.length}/${
-              chunks.length
-            } code chunks in vector database (namespace: ${namespace})`
-          );
+          // Report progress to callback if provided
+          const processedCount = i + batch.length;
+          if (progressCallback) {
+            progressCallback(processedCount, chunks.length, Math.floor(i / batchSize) + 1);
+          }
+
+          // Show progress notification (less frequent for better performance)
+          const batchNumber = Math.floor(i / batchSize) + 1;
+          const totalBatches = Math.ceil(chunks.length / batchSize);
+          if (batchNumber % 3 === 0 || batchNumber === totalBatches) { // Show every 3rd batch or final batch
+            vscode.window.showInformationMessage(
+              `Stored batch ${batchNumber}/${totalBatches}: ${processedCount}/${chunks.length} ${namespace} chunks`
+            );
+          }
 
           // Add a small delay between batches to avoid rate limits
           if (i + batchSize < chunks.length) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Reduced delay since we have larger batches
           }
         } catch (batchError) {
           console.error(
@@ -566,12 +573,10 @@ export class EmbeddingService {
           // Show progress notification
           vscode.window.showInformationMessage(
             `Indexing codebase for RAG functionality (namespace: ${namespace})... This may take a few minutes.`
-          );
-
-          // Parse and index the files
+          );          // Parse and index the files
           const chunks = await parseFilesIntoChunks(files);
           if (chunks.length > 0) {
-            await this.storeCodeChunks(chunks, namespace);
+            await this.storeCodeChunks(chunks, namespace, 15); // Use default batch size for auto-indexing
             this.lastIndexedProject = this.projectId; // This might need to be more granular if we track per-namespace indexing
           }
         }
@@ -719,6 +724,63 @@ export class EmbeddingService {
       vscode.window.showErrorMessage(
         `Failed to clear workspace embeddings: ${error}`
       );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a specific chunk by ID from Pinecone
+   * @param chunkId The ID of the chunk to delete
+   */
+  public async deleteChunk(chunkId: string): Promise<void> {
+    if (!this.initialized) {
+      const success = await this.initialize();
+      if (!success) {
+        throw new Error("Failed to initialize embedding service");
+      }
+    }
+
+    if (!this.pineconeClient) {
+      throw new Error("Pinecone client not initialized");
+    }
+
+    try {
+      const index = this.pineconeClient.index(this.indexName);
+      await index.deleteOne(chunkId);
+      console.log(`Successfully deleted chunk: ${chunkId}`);
+    } catch (error) {
+      console.error(`Error deleting chunk ${chunkId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete multiple chunks by IDs from Pinecone
+   * @param chunkIds Array of chunk IDs to delete
+   */
+  public async deleteChunks(chunkIds: string[]): Promise<void> {
+    if (!this.initialized) {
+      const success = await this.initialize();
+      if (!success) {
+        throw new Error("Failed to initialize embedding service");
+      }
+    }
+
+    if (!this.pineconeClient) {
+      throw new Error("Pinecone client not initialized");
+    }
+
+    try {
+      const index = this.pineconeClient.index(this.indexName);
+      // Delete chunks in batches to avoid API limits
+      const batchSize = 10;
+      for (let i = 0; i < chunkIds.length; i += batchSize) {
+        const batch = chunkIds.slice(i, i + batchSize);
+        await index.deleteMany(batch);
+        console.log(`Successfully deleted ${batch.length} chunks`);
+      }
+    } catch (error) {
+      console.error(`Error deleting chunks:`, error);
       throw error;
     }
   }

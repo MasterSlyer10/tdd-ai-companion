@@ -15,10 +15,10 @@
   let messageIdCounter = 0; // Counter for unique message IDs
   let currentTokenCount = 0; // Token counter
   const TOKEN_LIMIT = 100000; // Token limit
-  let isRequestCancelled = false; // Flag to track if the current request is cancelled
-  let activePromptId = null; // Track the ID of the currently active prompt
+  let isRequestCancelled = false; // Flag to track if the current request is cancelled  let activePromptId = null; // Track the ID of the currently active prompt
   // DOM Elements
   let tokenCountDisplay = null; // To display token count
+  let indexingStatusDisplay = null; // To display indexing status
   const featureInput = document.getElementById("feature-input");
   // const editFeatureButton = document.getElementById("edit-feature");
   
@@ -130,11 +130,15 @@
     activePromptId = null;
 
     // Load token count from state
-    loadTokenCountFromState();
-
-    // Initialize and display token count
+    loadTokenCountFromState();    // Initialize and display token count
     initializeTokenDisplay(); // Create the display element and place it
     updateTokenDisplay(); // Set initial text and color
+
+    // Initialize indexing status display
+    initializeIndexingStatusDisplay();
+
+    // Request initial indexing status from extension
+    vscode.postMessage({ command: "getIndexingStatus" });
 
     // Removed selection mode toggles as per user request
 
@@ -2636,9 +2640,17 @@
           renderSourceFileTree();
           renderTestFileTree();
         }
-        break;
-      case "clearChatUI":
+        break;      case "clearChatUI":
         chatMessages.innerHTML = "";
+        break;
+      case "indexingStatus":
+        updateIndexingStatus(message.status, message.statistics);
+        break;
+      case "indexingProgress":
+        updateIndexingProgress(message.progress);
+        break;
+      case "indexingComplete":
+        handleIndexingComplete(message.status);
         break;
     }
   });
@@ -2746,8 +2758,7 @@
       console.error("Failed to save project panel state:", e);
     }
   }
-  
-  // Function to load the project panel state
+    // Function to load the project panel state
   function loadProjectPanelState() {
     try {
       const isCollapsed = vscode.getState()?.projectPanelCollapsed;
@@ -2765,6 +2776,228 @@
     } catch (e) {
       console.error("Failed to load project panel state:", e);
     }
+  }
+
+  // INDEXING STATUS AND CONTROL FUNCTIONS
+  
+  // Initialize indexing status display
+  function initializeIndexingStatusDisplay() {
+    // Check if already exists
+    if (indexingStatusDisplay) return;
+    
+    // Create the indexing status display element
+    indexingStatusDisplay = document.createElement("div");
+    indexingStatusDisplay.id = "indexing-status-display";
+    indexingStatusDisplay.className = "indexing-status-panel";
+    
+    // Initial content
+    indexingStatusDisplay.innerHTML = `
+      <div class="indexing-status-header">
+        <span class="indexing-status-title">RAG Index Status</span>
+        <div class="indexing-controls">
+          <button id="manual-index-btn" class="indexing-control-btn" title="Manually trigger indexing">
+            <i class="codicon codicon-sync"></i>
+          </button>
+          <button id="clear-index-btn" class="indexing-control-btn" title="Clear index">
+            <i class="codicon codicon-trash"></i>
+          </button>
+          <button id="toggle-auto-index-btn" class="indexing-control-btn" title="Toggle auto-indexing">
+            <i class="codicon codicon-settings-gear"></i>
+          </button>
+        </div>
+      </div>
+      <div class="indexing-status-content">
+        <div id="indexing-status-info">No indexing status available</div>
+        <div id="indexing-progress" class="indexing-progress" style="display: none;">
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 0%;"></div>
+          </div>
+          <div class="progress-text">Initializing...</div>
+        </div>
+      </div>
+    `;
+    
+    // Find a good place to insert it - after the token display if it exists
+    const insertTarget = tokenCountDisplay?.parentNode || 
+                        chatInput?.parentNode || 
+                        document.querySelector('.input-container') ||
+                        chatMessages?.parentNode;
+    
+    if (insertTarget) {
+      // Insert before the chat input or at the end
+      if (chatInput?.parentNode === insertTarget) {
+        insertTarget.insertBefore(indexingStatusDisplay, chatInput.parentNode);
+      } else {
+        insertTarget.appendChild(indexingStatusDisplay);
+      }
+    }
+    
+    // Set up event listeners for control buttons
+    setupIndexingControlListeners();
+  }
+  
+  // Set up event listeners for indexing control buttons
+  function setupIndexingControlListeners() {
+    const manualIndexBtn = document.getElementById("manual-index-btn");
+    const clearIndexBtn = document.getElementById("clear-index-btn");
+    const toggleAutoIndexBtn = document.getElementById("toggle-auto-index-btn");
+    
+    if (manualIndexBtn) {
+      manualIndexBtn.addEventListener("click", () => {
+        vscode.postMessage({ command: "triggerManualIndex" });
+        showIndexingFeedback("Manual indexing triggered...");
+      });
+    }
+    
+    if (clearIndexBtn) {
+      clearIndexBtn.addEventListener("click", () => {
+        if (confirm("Are you sure you want to clear the RAG index? This will remove all embedded vectors.")) {
+          vscode.postMessage({ command: "clearIndex" });
+          showIndexingFeedback("Clearing index...");
+        }
+      });
+    }
+    
+    if (toggleAutoIndexBtn) {
+      toggleAutoIndexBtn.addEventListener("click", () => {
+        vscode.postMessage({ command: "toggleAutoIndexing" });
+      });
+    }
+  }
+  
+  // Update indexing status display
+  function updateIndexingStatus(status, statistics) {
+    if (!indexingStatusDisplay) {
+      initializeIndexingStatusDisplay();
+    }
+    
+    const statusInfo = document.getElementById("indexing-status-info");
+    const progressContainer = document.getElementById("indexing-progress");
+    
+    if (!statusInfo) return;
+    
+    // Build status info HTML
+    let statusHtml = "";
+    
+    if (status?.isIndexing) {
+      statusHtml = `
+        <div class="status-item active">
+          <i class="codicon codicon-loading codicon-modifier-spin"></i>
+          <span>Indexing in progress...</span>
+        </div>
+      `;
+      if (progressContainer) {
+        progressContainer.style.display = "block";
+      }
+    } else {
+      const lastUpdate = status?.lastUpdate ? new Date(status.lastUpdate).toLocaleString() : "Never";
+      statusHtml = `
+        <div class="status-item">
+          <i class="codicon codicon-check"></i>
+          <span>Index ready</span>
+        </div>
+        <div class="status-detail">Last updated: ${lastUpdate}</div>
+      `;
+      if (progressContainer) {
+        progressContainer.style.display = "none";
+      }
+    }
+    
+    // Add statistics if available
+    if (statistics) {
+      statusHtml += `
+        <div class="status-stats">
+          <div class="stat-item">
+            <span class="stat-label">Indexed files:</span>
+            <span class="stat-value">${statistics.indexedFiles || 0}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total chunks:</span>
+            <span class="stat-value">${statistics.totalChunks || 0}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Index size:</span>
+            <span class="stat-value">${formatBytes(statistics.indexSize || 0)}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    statusInfo.innerHTML = statusHtml;
+  }
+  
+  // Update indexing progress
+  function updateIndexingProgress(progress) {
+    const progressContainer = document.getElementById("indexing-progress");
+    const progressFill = progressContainer?.querySelector(".progress-fill");
+    const progressText = progressContainer?.querySelector(".progress-text");
+    
+    if (!progressContainer || !progressFill || !progressText) return;
+    
+    progressContainer.style.display = "block";
+    
+    const percentage = Math.round((progress.processed / progress.total) * 100);
+    progressFill.style.width = `${percentage}%`;
+    
+    let statusText = `${progress.operation}: ${progress.processed}/${progress.total}`;
+    if (progress.currentFile) {
+      const fileName = progress.currentFile.split(/[/\\]/).pop();
+      statusText += ` (${fileName})`;
+    }
+    
+    progressText.textContent = statusText;
+  }
+  
+  // Handle indexing completion
+  function handleIndexingComplete(status) {
+    const progressContainer = document.getElementById("indexing-progress");
+    if (progressContainer) {
+      progressContainer.style.display = "none";
+    }
+    
+    // Update status display
+    updateIndexingStatus(status);
+    
+    // Show completion feedback
+    showIndexingFeedback("Indexing completed successfully!", 3000);
+  }
+  
+  // Show temporary indexing feedback
+  function showIndexingFeedback(message, duration = 2000) {
+    // Create or update feedback element
+    let feedback = document.getElementById("indexing-feedback");
+    if (!feedback) {
+      feedback = document.createElement("div");
+      feedback.id = "indexing-feedback";
+      feedback.className = "indexing-feedback";
+      
+      // Insert near the indexing status display
+      const target = indexingStatusDisplay || chatMessages;
+      if (target?.parentNode) {
+        target.parentNode.insertBefore(feedback, target.nextSibling);
+      }
+    }
+    
+    feedback.textContent = message;
+    feedback.style.display = "block";
+    feedback.style.opacity = "1";
+    
+    // Auto-hide after duration
+    setTimeout(() => {
+      feedback.style.opacity = "0";
+      setTimeout(() => {
+        feedback.style.display = "none";
+      }, 300);
+    }, duration);
+  }
+  
+  // Format bytes to human readable format
+  function formatBytes(bytes) {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   }
 
   // Initial render
