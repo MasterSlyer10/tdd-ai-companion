@@ -6,11 +6,7 @@ interface ChatMessage {
   content: string;
 }
 
-interface IndexingStatus {
-  isIndexing: boolean;
-  progress?: IndexingProgress;
-  lastUpdate?: number;
-}
+
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "tdd-ai-companion.sidebar";
@@ -30,23 +26,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private _chatHistory: ChatMessage[] = [];
   private _cancellationTokenSource?: vscode.CancellationTokenSource;
   private _isCurrentRequestCancelled: boolean = false; // Add internal cancellation flag
-
-  // Enhanced indexing status tracking
-  private _indexingStatus: IndexingStatus = { isIndexing: false };
-  private _progressUpdateTimer?: NodeJS.Timeout;
+  // Enhanced indexing status tracking - REMOVED FOR DEBUG UI CLEANUP
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     context: vscode.ExtensionContext,
     ragService: RAGService // Add RAGService here
-  ) {
-    this._context = context;
+  ) {    this._context = context;
     this._ragService = ragService; // Store it
 
-    // Set up progress callback for RAG service
-    this._ragService.setProgressCallback((progress: IndexingProgress) => {
-      this.handleIndexingProgress(progress);
-    });
+    // Progress callback removed - debug UI cleanup
 
     // Load the stuff from previous session
     this.loadState();
@@ -193,9 +182,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             checkedItems: this._checkedItems,
           });
 
-          // Send initial indexing status
-          this.sendIndexingStatus();
-
           break;
 
         case "requestTestSuggestion":
@@ -290,21 +276,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           });
           break;        case "openExtensionSettings":
           vscode.commands.executeCommand('workbench.action.openSettings', 'tdd-ai-companion');
-          break;
-        case "getIndexingStatus":
-          this.sendIndexingStatus();
-          break;
-        case "triggerManualIndex":
-          await this.triggerManualIndexing();
-          break;
-        case "clearIndex":
-          await this.clearIndex();
-          break;
-        case "performCleanup":
-          await this.performCleanup();
-          break;
-        case "toggleAutoIndexing":
-          this.toggleAutoIndexing();
           break;
       }
     });
@@ -455,16 +426,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this._testFiles.push(file);
       // Also add to checked test items
       this._checkedTestItems.push(file.fsPath);
-      
-      // Update RAG service with new file selection
+        // Update RAG service with new file selection
       await this.updateRAGServiceSelection();
       
       this.postTestFilesUpdate();
       this.postCheckedTestItemsUpdate(); // Notify webview about checked test items
       this.saveState();
-      
-      // Send updated indexing status
-      this.sendIndexingStatus();
     }
   }
 
@@ -484,14 +451,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (this._view) {
         this._view.webview.postMessage({
             command: "uncheckFileTreeItem",
-            path: file.fsPath,
-            treeType: 'test' // Specify tree type
+            path: file.fsPath,        treeType: 'test' // Specify tree type
         });
     }
     this.saveState();
-    
-    // Send updated indexing status
-    this.sendIndexingStatus();
   }
 
   private postTestFilesUpdate() {
@@ -566,103 +529,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     return difference > threshold;
   }
 
-  /**
-   * Trigger manual indexing of selected files
-   */
-  private async triggerManualIndexing(): Promise<void> {
-    const allSelectedFiles = [...this._sourceFiles, ...this._testFiles];
-    
-    if (allSelectedFiles.length === 0) {
-      vscode.window.showWarningMessage('No files selected for indexing.');
-      return;
-    }
 
-    try {
-      vscode.window.showInformationMessage(
-        `Starting manual indexing of ${allSelectedFiles.length} files...`
-      );
-      
-      await this._ragService.indexProjectFiles(allSelectedFiles);
-      
-      vscode.window.showInformationMessage(
-        `Successfully indexed ${allSelectedFiles.length} files.`
-      );
-    } catch (error) {
-      console.error('Manual indexing failed:', error);
-      vscode.window.showErrorMessage(
-        `Manual indexing failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
 
-  /**
-   * Clear the index
-   */
-  private async clearIndex(): Promise<void> {
-    try {
-      const confirmed = await vscode.window.showWarningMessage(
-        'Are you sure you want to clear the entire index? This action cannot be undone.',
-        { modal: true },
-        'Clear Index'
-      );
 
-      if (confirmed === 'Clear Index') {
-        await this._ragService.clearIndex();
-        vscode.window.showInformationMessage('Index cleared successfully.');
-        this.sendIndexingStatus();
-      }
-    } catch (error) {
-      console.error('Failed to clear index:', error);
-      vscode.window.showErrorMessage(
-        `Failed to clear index: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
-
-  /**
-   * Perform manual cleanup
-   */
-  private async performCleanup(): Promise<void> {
-    try {
-      vscode.window.showInformationMessage('Starting cleanup...');
-      
-      const result = await this._ragService.performManualCleanup();
-      
-      vscode.window.showInformationMessage(
-        `Cleanup complete: removed ${result.removedFiles} files and ${result.removedChunks} chunks.`
-      );
-      
-      if (result.errors.length > 0) {
-        console.error('Cleanup errors:', result.errors);
-        vscode.window.showWarningMessage(
-          `Cleanup completed with ${result.errors.length} errors. Check the console for details.`
-        );
-      }
-      
-      this.sendIndexingStatus();
-    } catch (error) {
-      console.error('Cleanup failed:', error);
-      vscode.window.showErrorMessage(
-        `Cleanup failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
-
-  /**
-   * Toggle auto-indexing on/off
-   */
-  private toggleAutoIndexing(): void {
-    const currentStatus = this._ragService.getIndexingStatus();
-    const newStatus = !currentStatus.autoIndexingEnabled;
-    
-    this._ragService.setAutoIndexingEnabled(newStatus);
-    
-    vscode.window.showInformationMessage(
-      `Auto-indexing ${newStatus ? 'enabled' : 'disabled'}.`
-    );
-    
-    this.sendIndexingStatus();
-  }
   public getCurrentFeature(): string {
     return this._currentFeature;
   }
@@ -772,15 +641,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }  private async addSourceFile(file: vscode.Uri) {
     if (!this._sourceFiles.some((f) => f.fsPath === file.fsPath)) {
       this._sourceFiles.push(file);
-      
-      // Update RAG service with new file selection
+        // Update RAG service with new file selection
       await this.updateRAGServiceSelection();
       
       this.postSourceFilesUpdate();
       this.saveState();
       
-      // Send updated indexing status
-      this.sendIndexingStatus();
+      // Indexing status removed - debug UI cleanup
     }
   }
 
@@ -805,13 +672,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             command: "uncheckFileTreeItem",
             path: file.fsPath,
             treeType: 'source' // Specify tree type
-        });
-    }
+        });    }
     this.postSourceFilesUpdate();
     this.saveState();
-    
-    // Send updated indexing status
-    this.sendIndexingStatus();
   }
 
 
@@ -961,57 +824,5 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         </html>`;
   }
 
-  /**
-   * Handle indexing progress updates from RAG service
-   */
-  private handleIndexingProgress(progress: IndexingProgress): void {
-    this._indexingStatus = {
-      isIndexing: progress.stage !== 'complete',
-      progress,
-      lastUpdate: Date.now()
-    };
 
-    // Send progress update to webview
-    if (this._view) {
-      this._view.webview.postMessage({
-        command: "indexingProgress",
-        progress,
-        status: this._indexingStatus
-      });
-    }
-
-    // Clear timer and set new one to update UI
-    if (this._progressUpdateTimer) {
-      clearTimeout(this._progressUpdateTimer);
-    }
-
-    // If indexing is complete, clear status after a brief delay
-    if (progress.stage === 'complete') {
-      this._progressUpdateTimer = setTimeout(() => {
-        this._indexingStatus.isIndexing = false;
-        if (this._view) {
-          this._view.webview.postMessage({
-            command: "indexingComplete",
-            status: this._indexingStatus
-          });
-        }
-      }, 2000); // Show completion for 2 seconds
-    }
-  }
-
-  /**
-   * Send indexing status to webview
-   */
-  private sendIndexingStatus(): void {
-    if (this._view) {
-      const ragStatus = this._ragService.getIndexingStatus();
-      const projectStats = this._ragService.getProjectStatistics();
-      
-      this._view.webview.postMessage({
-        command: "indexingStatus",
-        status: ragStatus,
-        statistics: projectStats
-      });
-    }
-  }
 }
