@@ -1373,6 +1373,12 @@
     }
     contentWrapper.appendChild(actionsElement); // Append actions to the wrapper
 
+    // Add user feedback section for AI messages
+    if (!isUser) {
+      const feedbackSection = createUserFeedbackSection(messageId);
+      contentWrapper.appendChild(feedbackSection);
+    }
+
     messageElement.appendChild(contentWrapper); // Append the wrapper to the message element
 
 
@@ -1389,6 +1395,9 @@
 
     // Save chat history
     saveChatHistory();
+    
+    // Return the message element for potential further manipulation
+    return messageElement;
   }
 
   // This function is called when an AI response or a system message (like "cancelled") is added.
@@ -1507,7 +1516,6 @@
       }
     });
   }
-
   // Save chat history
   function saveChatHistory() {
     const messages = Array.from(chatMessages.children)
@@ -1523,12 +1531,23 @@
         // For assistant messages, get the original HTML to preserve markdown
         const content = isUser ? contentEl.textContent : contentEl.innerHTML;
 
-        return {
+        const messageData = {
           role: isUser ? "user" : "assistant",
           content: content,
           // Add a flag to indicate this content contains HTML
           contentType: isUser ? "text" : "html",
         };
+
+        // Add user feedback data for AI messages
+        if (!isUser && msg.dataset.userFeedback) {
+          messageData.userFeedback = {
+            value: msg.dataset.userFeedback,
+            label: msg.dataset.userFeedbackLabel,
+            timestamp: msg.dataset.feedbackTimestamp
+          };
+        }
+
+        return messageData;
       });
 
     vscode.postMessage({
@@ -2766,6 +2785,204 @@
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  }
+
+  // User Feedback System Functions
+  
+  /**
+   * Create a user feedback section for AI responses
+   * @param {string} messageId - The ID of the message
+   * @returns {HTMLElement} The feedback section element
+   */
+  function createUserFeedbackSection(messageId) {
+    const feedbackContainer = document.createElement('div');
+    feedbackContainer.className = 'user-feedback-container';
+    feedbackContainer.dataset.messageId = messageId;
+
+    // Create header
+    const feedbackHeader = document.createElement('div');
+    feedbackHeader.className = 'feedback-header';
+    feedbackHeader.onclick = () => toggleFeedback(feedbackContainer);
+
+    const feedbackLabel = document.createElement('span');
+    feedbackLabel.className = 'feedback-label';
+    feedbackLabel.innerHTML = '<i class="codicon codicon-feedback"></i> How did you use this response?';
+
+    const feedbackToggle = document.createElement('button');
+    feedbackToggle.className = 'feedback-toggle';
+    feedbackToggle.innerHTML = '<i class="codicon codicon-chevron-down"></i>';
+    feedbackToggle.onclick = (e) => {
+      e.stopPropagation();
+      toggleFeedback(feedbackContainer);
+    };
+
+    feedbackHeader.appendChild(feedbackLabel);
+    feedbackHeader.appendChild(feedbackToggle);
+
+    // Create content (initially collapsed)
+    const feedbackContent = document.createElement('div');
+    feedbackContent.className = 'feedback-content collapsed';
+
+    // Define feedback options
+    const feedbackOptions = [
+      {
+        value: 'used',
+        label: 'Used as-is',
+        icon: 'codicon-check',
+        description: 'Implemented the suggestion exactly as provided'
+      },
+      {
+        value: 'modified',
+        label: 'Used with modifications',
+        icon: 'codicon-edit',
+        description: 'Made changes to adapt the suggestion to your needs'
+      },
+      {
+        value: 'inspired',
+        label: 'Inspired in a new direction',
+        icon: 'codicon-lightbulb',
+        description: 'Used the suggestion as inspiration for a different approach'
+      },
+      {
+        value: 'ignored',
+        label: 'Ignored',
+        icon: 'codicon-close',
+        description: 'Did not use the suggestion'
+      }
+    ];
+
+    // Create radio button options
+    feedbackOptions.forEach((option, index) => {
+      const optionContainer = document.createElement('div');
+      optionContainer.className = 'feedback-option';
+
+      const radioInput = document.createElement('input');
+      radioInput.type = 'radio';
+      radioInput.name = `feedback-${messageId}`;
+      radioInput.value = option.value;
+      radioInput.id = `feedback-${messageId}-${option.value}`;
+      radioInput.className = 'feedback-radio';
+      radioInput.onchange = () => handleUserFeedback(messageId, option.value, option.label);
+
+      const radioLabel = document.createElement('label');
+      radioLabel.htmlFor = radioInput.id;
+      radioLabel.className = 'feedback-label-option';
+      radioLabel.innerHTML = `<i class="codicon ${option.icon}"></i> ${option.label}`;
+      radioLabel.title = option.description;
+
+      optionContainer.appendChild(radioInput);
+      optionContainer.appendChild(radioLabel);
+      feedbackContent.appendChild(optionContainer);
+    });
+
+    feedbackContainer.appendChild(feedbackHeader);
+    feedbackContainer.appendChild(feedbackContent);
+
+    return feedbackContainer;
+  }
+
+  /**
+   * Toggle the visibility of the feedback content
+   * @param {HTMLElement} feedbackContainer - The feedback container element
+   */
+  function toggleFeedback(feedbackContainer) {
+    const content = feedbackContainer.querySelector('.feedback-content');
+    const toggleIcon = feedbackContainer.querySelector('.feedback-toggle .codicon');
+
+    if (content.classList.contains('collapsed')) {
+      content.classList.remove('collapsed');
+      toggleIcon.className = 'codicon codicon-chevron-up';
+    } else {
+      content.classList.add('collapsed');
+      toggleIcon.className = 'codicon codicon-chevron-down';
+    }
+  }
+
+  /**
+   * Handle user feedback selection
+   * @param {string} messageId - The ID of the message
+   * @param {string} feedbackValue - The selected feedback value
+   * @param {string} feedbackLabel - The selected feedback label
+   */
+  function handleUserFeedback(messageId, feedbackValue, feedbackLabel) {
+    console.log(`User feedback for message ${messageId}: ${feedbackValue} (${feedbackLabel})`);
+
+    // Find the message element
+    const messageElement = document.getElementById(messageId);
+    if (!messageElement) {
+      console.error('Message element not found for feedback:', messageId);
+      return;
+    }
+
+    // Store feedback data on the message element
+    messageElement.dataset.userFeedback = feedbackValue;
+    messageElement.dataset.userFeedbackLabel = feedbackLabel;
+    messageElement.dataset.feedbackTimestamp = new Date().toISOString();
+
+    // Update the feedback header to show selection
+    const feedbackContainer = messageElement.querySelector('.user-feedback-container');
+    if (feedbackContainer) {
+      const header = feedbackContainer.querySelector('.feedback-header .feedback-label');
+      const iconMap = {
+        'used': 'codicon-check',
+        'modified': 'codicon-edit',
+        'inspired': 'codicon-lightbulb',
+        'ignored': 'codicon-close'
+      };
+      
+      const icon = iconMap[feedbackValue] || 'codicon-feedback';
+      header.innerHTML = `<i class="${icon} feedback-confirmed"></i> ${feedbackLabel}`;
+      header.classList.add('feedback-selected');
+
+      // Collapse the feedback section after selection
+      setTimeout(() => {
+        const content = feedbackContainer.querySelector('.feedback-content');
+        const toggleIcon = feedbackContainer.querySelector('.feedback-toggle .codicon');
+        content.classList.add('collapsed');
+        toggleIcon.className = 'codicon codicon-chevron-down';
+      }, 500);
+    }
+
+    // Save the updated chat history with feedback
+    saveChatHistory();
+
+    // Send feedback to extension for analytics/storage
+    vscode.postMessage({
+      command: 'userFeedback',
+      messageId: messageId,
+      feedback: {
+        value: feedbackValue,
+        label: feedbackLabel,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+
+  // End User Feedback System Functions
+  function cleanupFeaturePrompt() {
+    const featurePromptIcon = document.getElementById('feature-prompt-icon');
+    const featurePromptText = document.getElementById('feature-prompt-text');
+
+    if (featurePromptIcon) {
+      featurePromptIcon.classList.remove('pulse-icon');
+      setTimeout(() => {
+        if (featurePromptIcon) {
+          featurePromptIcon.classList.add('fade-out');
+        }
+      }, 300);
+    }
+
+    if (featurePromptText) {
+      featurePromptText.classList.add('fade-out');
+    }
+
+    // Remove the feature prompt after the animation
+    setTimeout(() => {
+      const featurePromptContainer = document.getElementById('feature-prompt-container');
+      if (featurePromptContainer) {
+        featurePromptContainer.remove();
+      }
+    }, 600);
   }
 
   // Initial render

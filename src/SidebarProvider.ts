@@ -274,7 +274,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           webviewView.webview.postMessage({
             command: "clearChatUI",
           });
-          break;        case "openExtensionSettings":
+          break;        case "userFeedback":
+          // Handle user feedback data for analytics/logging
+          console.log(`User feedback received for message ${message.messageId}:`, message.feedback);
+          
+          // You can extend this to store feedback data in workspace state or send to analytics
+          // For now, we'll just log it
+          // this._context.workspaceState.update("userFeedback", [...(this._context.workspaceState.get("userFeedback", [])), message]);
+          break;
+        case "openExtensionSettings":
           vscode.commands.executeCommand('workbench.action.openSettings', 'tdd-ai-companion');
           break;
       }
