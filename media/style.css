@@ -1860,7 +1860,10 @@ body {
 }
 
 .feedback-header:hover {
-  background-color: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.1));
+  background-color: var(
+    --vscode-toolbar-hoverBackground,
+    rgba(128, 128, 128, 0.1)
+  );
 }
 
 .feedback-label {
@@ -1872,12 +1875,12 @@ body {
 }
 
 .feedback-label.feedback-selected {
-  color: var(--vscode-charts-green, #4CAF50);
+  color: var(--vscode-charts-green, #4caf50);
   font-weight: 500;
 }
 
 .feedback-confirmed {
-  color: var(--vscode-charts-green, #4CAF50) !important;
+  color: var(--vscode-charts-green, #4caf50) !important;
 }
 
 .feedback-toggle {
@@ -1894,7 +1897,10 @@ body {
 }
 
 .feedback-toggle:hover {
-  background-color: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+  background-color: var(
+    --vscode-toolbar-hoverBackground,
+    rgba(128, 128, 128, 0.15)
+  );
   color: var(--vscode-editor-foreground);
 }
 
@@ -1942,7 +1948,10 @@ body {
 }
 
 .feedback-label-option:hover {
-  background-color: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+  background-color: var(
+    --vscode-list-hoverBackground,
+    rgba(128, 128, 128, 0.1)
+  );
 }
 
 .feedback-label-option .codicon {
@@ -1952,22 +1961,28 @@ body {
 
 /* Selected radio button styling */
 .feedback-radio:checked + .feedback-label-option {
-  background-color: var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.2));
-  color: var(--vscode-list-activeSelectionForeground, var(--vscode-editor-foreground));
+  background-color: var(
+    --vscode-list-activeSelectionBackground,
+    rgba(0, 122, 204, 0.2)
+  );
+  color: var(
+    --vscode-list-activeSelectionForeground,
+    var(--vscode-editor-foreground)
+  );
 }
 
 .feedback-radio:checked + .feedback-label-option .codicon {
   opacity: 1;
-  color: var(--vscode-charts-blue, #007ACC);
+  color: var(--vscode-charts-blue, #007acc);
 }
 
 /* Focus states for accessibility */
 .feedback-radio:focus + .feedback-label-option {
-  outline: 1px solid var(--vscode-focusBorder, #007ACC);
+  outline: 1px solid var(--vscode-focusBorder, #007acc);
   outline-offset: 1px;
 }
 
 .feedback-toggle:focus {
-  outline: 1px solid var(--vscode-focusBorder, #007ACC);
+  outline: 1px solid var(--vscode-focusBorder, #007acc);
   outline-offset: 1px;
 }

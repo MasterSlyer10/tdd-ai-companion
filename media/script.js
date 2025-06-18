@@ -2417,14 +2417,21 @@
             console.error("[Stream Debug] Error rendering final markdown:", e);
             // Use the existing content if there's an error
           }
-        }
-
-        // Remove the streaming flag
+        }        // Remove the streaming flag
         streamedMessage.removeAttribute('data-streaming');
         console.log("[Stream Debug] Removed streaming flag from message");
 
         // Store the full raw text for copy functionality
         streamedMessage.dataset.rawText = rawText;
+
+        // Add user feedback section for completed AI streaming message
+        const messageId = streamedMessage.id;
+        const feedbackSection = createUserFeedbackSection(messageId);
+        const streamContentWrapper = streamedMessage.querySelector('.message-content-wrapper');
+        if (streamContentWrapper && !streamContentWrapper.querySelector('.user-feedback-container')) {
+          console.log("[Stream Debug] Adding feedback section to streaming message");
+          streamContentWrapper.appendChild(feedbackSection);
+        }
 
         // Add action buttons to the message
         const actionContainer = streamedMessage.querySelector('.message-actions');
@@ -2931,7 +2938,7 @@
       };
       
       const icon = iconMap[feedbackValue] || 'codicon-feedback';
-      header.innerHTML = `<i class="${icon} feedback-confirmed"></i> ${feedbackLabel}`;
+      header.innerHTML = `<i class="feedback-confirmed codicon ${icon}"></i> ${feedbackLabel}`;
       header.classList.add('feedback-selected');
 
       // Collapse the feedback section after selection
