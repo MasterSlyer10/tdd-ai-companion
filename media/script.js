@@ -2624,8 +2624,7 @@
                 renderTestFileTree(); // Re-render test tree to reflect changes
             }
         }
-        break;
-      case "loadChatHistory":
+        break;      case "loadChatHistory":
         console.log("[LoadHistory] Received loadChatHistory command. History:", message.history);
         chatMessages.innerHTML = ""; // Clear existing messages
         // Reset messageIdCounter when loading history to ensure fresh IDs for the new set of messages
@@ -2638,7 +2637,60 @@
         if (message.history && message.history.length > 0) {
           message.history.forEach((msg) => {
             // Use the addMessageToChat function to render historical messages
-            addMessageToChat(msg.content, msg.role === "user");
+            const messageElement = addMessageToChat(msg.content, msg.role === "user");
+            
+            // Restore user feedback data for AI messages
+            if (msg.role === "assistant" && msg.userFeedback && messageElement) {
+              console.log("[LoadHistory] Restoring feedback for message:", msg.userFeedback);
+              
+              // Set the feedback data on the message element
+              messageElement.dataset.userFeedback = msg.userFeedback.value;
+              messageElement.dataset.userFeedbackLabel = msg.userFeedback.label;
+              messageElement.dataset.feedbackTimestamp = msg.userFeedback.timestamp;
+              
+              // Update the feedback UI to show the selection
+              const feedbackContainer = messageElement.querySelector('.user-feedback-container');
+              if (feedbackContainer) {
+                const header = feedbackContainer.querySelector('.feedback-header .feedback-label');
+                const radioInput = feedbackContainer.querySelector(`input[value="${msg.userFeedback.value}"]`);
+                
+                if (header && radioInput) {
+                  // Check the appropriate radio button
+                  radioInput.checked = true;
+                  
+                  // Update the header to show selection
+                  const iconMap = {
+                    'used': 'codicon-check',
+                    'modified': 'codicon-edit',
+                    'inspired': 'codicon-lightbulb',
+                    'ignored': 'codicon-close'
+                  };
+                  
+                  const icon = iconMap[msg.userFeedback.value] || 'codicon-feedback';
+                  header.innerHTML = `<i class="feedback-confirmed codicon ${icon}"></i> ${msg.userFeedback.label}`;
+                  header.classList.add('feedback-selected');
+                  
+                  // Apply appropriate color based on feedback type
+                  if (icon === 'codicon-check') { // "Used"
+                    header.style.color = 'var(--vscode-charts-green, #4caf50)';
+                  } else if (icon === 'codicon-edit') { // "Used with modifications"
+                    header.style.color = 'var(--vscode-charts-yellow, #ffeb3b)';
+                  } else if (icon === 'codicon-lightbulb') { // "Inspired a new direction"
+                    header.style.color = 'var(--vscode-charts-blue, #2196f3)';
+                  } else if (icon === 'codicon-close') { // "Ignored"
+                    header.style.color = 'var(--vscode-charts-red, #f44336)';
+                  }
+                  
+                  // Keep the feedback section collapsed since it's already selected
+                  const content = feedbackContainer.querySelector('.feedback-content');
+                  const toggleIcon = feedbackContainer.querySelector('.feedback-toggle .codicon');
+                  if (content && toggleIcon) {
+                    content.classList.add('collapsed');
+                    toggleIcon.className = 'codicon codicon-chevron-down';
+                  }
+                }
+              }
+            }
           });
 
           // Scroll to bottom after all messages are added
