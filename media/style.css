@@ -1844,9 +1844,10 @@ body {
 
 /* User Feedback Section Styles */
 .user-feedback-container {
-  margin-top: 8px;
-  border-top: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.2));
-  padding-top: 8px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.2));
+  padding-bottom: 8px;
 }
 
 .feedback-header {
@@ -1880,7 +1881,7 @@ body {
 }
 
 .feedback-confirmed {
-  color: var(--vscode-charts-green, #4caf50) !important;
+  /* color: var(--vscode-charts-green, #4caf50) !important; */
 }
 
 .feedback-toggle {
@@ -1986,3 +1987,5 @@ body {
   outline: 1px solid var(--vscode-focusBorder, #007acc);
   outline-offset: 1px;
 }
+
+/* Change Color of the selected feedback lable */

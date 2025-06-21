@@ -1366,18 +1366,18 @@
       const deleteButton = document.createElement("button");
       deleteButton.className = "message-action-button delete-button";
       deleteButton.innerHTML = '<i class="codicon codicon-trash"></i>';
-      deleteButton.title = "Delete message";
-      deleteButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
+      deleteButton.title = "Delete message";      deleteButton.style.display = isCurrentlyGenerating ? 'none' : 'flex';
       deleteButton.onclick = () => handleDeleteAIMessage(messageElement);
       actionsElement.appendChild(deleteButton);
     }
-    contentWrapper.appendChild(actionsElement); // Append actions to the wrapper
-
-    // Add user feedback section for AI messages
+    
+    // Add user feedback section for AI messages (before actions)
     if (!isUser) {
       const feedbackSection = createUserFeedbackSection(messageId);
       contentWrapper.appendChild(feedbackSection);
     }
+    
+    contentWrapper.appendChild(actionsElement); // Append actions to the wrapper
 
     messageElement.appendChild(contentWrapper); // Append the wrapper to the message element
 
@@ -2419,22 +2419,21 @@
           }
         }        // Remove the streaming flag
         streamedMessage.removeAttribute('data-streaming');
-        console.log("[Stream Debug] Removed streaming flag from message");
-
-        // Store the full raw text for copy functionality
+        console.log("[Stream Debug] Removed streaming flag from message");        // Store the full raw text for copy functionality
         streamedMessage.dataset.rawText = rawText;
 
-        // Add user feedback section for completed AI streaming message
+        // Add user feedback section for completed AI streaming message (before action buttons)
         const messageId = streamedMessage.id;
         const feedbackSection = createUserFeedbackSection(messageId);
         const streamContentWrapper = streamedMessage.querySelector('.message-content-wrapper');
-        if (streamContentWrapper && !streamContentWrapper.querySelector('.user-feedback-container')) {
-          console.log("[Stream Debug] Adding feedback section to streaming message");
-          streamContentWrapper.appendChild(feedbackSection);
+        const actionContainer = streamedMessage.querySelector('.message-actions');
+        
+        if (streamContentWrapper && !streamContentWrapper.querySelector('.user-feedback-container') && actionContainer) {
+          console.log("[Stream Debug] Adding feedback section to streaming message before action buttons");
+          streamContentWrapper.insertBefore(feedbackSection, actionContainer);
         }
 
         // Add action buttons to the message
-        const actionContainer = streamedMessage.querySelector('.message-actions');
         if (actionContainer) {
           console.log("[Stream Debug] Adding action buttons");
           // Clear any existing buttons first
@@ -2940,6 +2939,16 @@
       const icon = iconMap[feedbackValue] || 'codicon-feedback';
       header.innerHTML = `<i class="feedback-confirmed codicon ${icon}"></i> ${feedbackLabel}`;
       header.classList.add('feedback-selected');
+
+      if (icon === 'codicon-check') { // "Used"
+        header.style.color = 'var(--vscode-charts-green, #4caf50)';
+      } else if (icon === 'codicon-edit') { // "Used with modifications"
+        header.style.color = 'var(--vscode-charts-yellow, #ffeb3b)';
+      } else if (icon === 'codicon-lightbulb') { // "Inspired a new direction"
+        header.style.color = 'var(--vscode-charts-blue, #2196f3)';
+      } else if (icon === 'codicon-close') { // "Ignored"
+        header.style.color = 'var(--vscode-charts-red, #f44336)';
+      }
 
       // Collapse the feedback section after selection
       setTimeout(() => {
