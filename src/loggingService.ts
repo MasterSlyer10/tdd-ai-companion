@@ -1,0 +1,487 @@
+import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Event type definitions
+export interface BaseEvent {
+  timestamp: string;
+  participantId: string;
+  sessionId: string;
+  eventType: string;
+}
+
+export interface SuggestionProvidedEvent extends BaseEvent {
+  eventType: 'suggestion_provided';
+  suggestionId: string;
+  suggestionSource: string; // 'suggest_test_button' | 'chat_query' | 'auto_suggestion'
+  suggestionText: string;
+  context: {
+    feature: string;
+    sourceFiles: string[];
+    testFiles: string[];
+    tokenCount: number;
+  };
+}
+
+export interface SuggestionInteractionEvent extends BaseEvent {
+  eventType: 'suggestion_interaction_event';
+  suggestionId: string;
+  interactionType: 'used' | 'modified' | 'inspired' | 'ignored';
+  interactionTimestamp: string;
+}
+
+export interface ChatQuerySentEvent extends BaseEvent {
+  eventType: 'chat_query_sent';
+  queryId: string;
+  queryText: string;
+  querySource: string; // 'manual_input' | 'suggest_test_button'
+}
+
+export interface ChatResponseReceivedEvent extends BaseEvent {
+  eventType: 'chat_response_received';
+  queryId: string;
+  responseText: string;
+  responseTokenCount?: number;
+  totalInputTokens?: number;
+}
+
+export interface FileSavedEvent extends BaseEvent {
+  eventType: 'file_saved';
+  filePath: string;
+  fileType: 'source' | 'test' | 'other';
+  fileContent?: string; // Optional: full content or diff
+}
+
+export interface TestRunInitiatedEvent extends BaseEvent {
+  eventType: 'test_run_initiated';
+  testScope: string; // 'all' | 'file' | 'specific'
+  testCommand?: string;
+}
+
+export interface TestRunCompletedEvent extends BaseEvent {
+  eventType: 'test_run_completed';
+  overallStatus: 'pass' | 'fail' | 'error';
+  testResults: {
+    passCount: number;
+    failCount: number;
+    errorCount: number;
+    failingTests?: string[];
+    erroringTests?: string[];
+  };
+}
+
+export interface ExperimentSessionStartEvent extends BaseEvent {
+  eventType: 'experiment_session_start';
+  conditionOrder: string[];
+}
+
+export interface TaskStartEvent extends BaseEvent {
+  eventType: 'task_start';
+  taskId: string;
+  condition: 'LLM' | 'Traditional';
+}
+
+export interface TaskEndEvent extends BaseEvent {
+  eventType: 'task_end';
+  taskId: string;
+  duration: number; // in milliseconds
+}
+
+export type LogEvent = 
+  | SuggestionProvidedEvent
+  | SuggestionInteractionEvent
+  | ChatQuerySentEvent
+  | ChatResponseReceivedEvent
+  | FileSavedEvent
+  | TestRunInitiatedEvent
+  | TestRunCompletedEvent
+  | ExperimentSessionStartEvent
+  | TaskStartEvent
+  | TaskEndEvent;
+
+export class LoggingService {
+  private context: vscode.ExtensionContext;
+  private participantId: string = '';
+  private sessionId: string = '';
+  private logFilePath: string = '';
+  private currentTaskId: string = '';
+  private taskStartTime: number = 0;
+  private fileWatcher?: vscode.FileSystemWatcher;
+  private activeQueryMap: Map<string, string> = new Map(); // queryId -> suggestionId mapping
+  private disposables: vscode.Disposable[] = []; // For cleanup
+
+  constructor(context: vscode.ExtensionContext) {
+    this.context = context;
+    this.initialize();
+  }
+  private async initialize(): Promise<void> {
+    // Check if logging is enabled
+    const config = vscode.workspace.getConfiguration('tddAICompanion');
+    const loggingEnabled = config.get('enableLogging', true);
+    
+    if (!loggingEnabled) {
+      console.log('Logging is disabled in settings');
+      return;
+    }
+
+    // Generate or load participant ID
+    this.participantId = this.context.globalState.get('participantId') || '';
+    if (!this.participantId) {
+      this.participantId = this.generateUniqueId('participant');
+      await this.context.globalState.update('participantId', this.participantId);
+    }
+
+    // Generate session ID for this VS Code session
+    this.sessionId = this.generateUniqueId('session');
+
+    // Set up log file path
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+      const logDir = path.join(workspaceFolder.uri.fsPath, '.tdd-ai-logs');
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      this.logFilePath = path.join(logDir, `tdd-ai-log-${this.sessionId}.jsonl`);
+    }    // Set up file watchers for development activity logging
+    const logLevel = config.get('logLevel', 'standard') as string;
+    if (logLevel === 'detailed') {
+      this.setupFileWatchers();
+    }
+
+    // Log session start
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'experiment_session_start',
+      conditionOrder: ['LLM'] // Default condition for this extension
+    } as ExperimentSessionStartEvent);
+  }
+
+  private generateUniqueId(prefix: string): string {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substr(2, 9);
+    return `${prefix}_${timestamp}_${random}`;
+  }
+
+  private setupFileWatchers(): void {
+    // Watch for file saves in the workspace
+    if (vscode.workspace.workspaceFolders) {
+      this.fileWatcher = vscode.workspace.createFileSystemWatcher('**/*');
+      
+      // Listen for file changes (saves)
+      this.fileWatcher.onDidChange(async (uri) => {
+        await this.handleFileSaved(uri);
+      });
+
+      this.fileWatcher.onDidCreate(async (uri) => {
+        await this.handleFileSaved(uri);
+      });
+    }
+
+    // Listen for test runs (this might need integration with specific test runners)
+    this.setupTestRunListeners();
+  }
+
+  private async handleFileSaved(uri: vscode.Uri): Promise<void> {
+    try {
+      const filePath = uri.fsPath;
+      const fileName = path.basename(filePath);
+      
+      // Skip log files and other non-relevant files
+      if (fileName.includes('.tdd-ai-log') || fileName.startsWith('.')) {
+        return;
+      }
+
+      // Determine file type
+      let fileType: 'source' | 'test' | 'other' = 'other';
+      if (fileName.includes('.test.') || fileName.includes('.spec.') || filePath.includes('/test/') || filePath.includes('\\test\\')) {
+        fileType = 'test';
+      } else if (fileName.endsWith('.ts') || fileName.endsWith('.js') || fileName.endsWith('.py') || fileName.endsWith('.java')) {
+        fileType = 'source';
+      }
+
+      // Read file content (optional - can be disabled for privacy)
+      let fileContent: string | undefined;
+      const config = vscode.workspace.getConfiguration('tddAICompanion');
+      const logFileContent = config.get('logFileContent', false);
+      
+      if (logFileContent) {
+        try {
+          const document = await vscode.workspace.openTextDocument(uri);
+          fileContent = document.getText();
+        } catch (error) {
+          console.warn('Could not read file content for logging:', error);
+        }
+      }
+
+      await this.logEvent({
+        timestamp: new Date().toISOString(),
+        participantId: this.participantId,
+        sessionId: this.sessionId,
+        eventType: 'file_saved',
+        filePath: filePath,
+        fileType: fileType,
+        fileContent: fileContent
+      } as FileSavedEvent);
+    } catch (error) {
+      console.error('Error logging file save event:', error);
+    }
+  }
+  private setupTestRunListeners(): void {
+    // Listen for VS Code test run events
+    if (vscode.tests) {
+      // Register test run profile listener
+      const testController = vscode.tests.createTestController('tdd-ai-companion-test-watcher', 'TDD AI Companion Test Watcher');
+      this.disposables.push(testController);      // Listen for test run requests
+      testController.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, (request, token) => {
+        const testFiles = request.include?.map(test => test.uri?.fsPath || test.id) || [];
+        this.logTestRunInitiated(
+          'vscode-test-run',
+          `VS Code test run: ${testFiles.join(', ')}`
+        );
+      });
+    }
+
+    // Also listen for terminal commands that might indicate test runs
+    vscode.window.onDidOpenTerminal(async (terminal) => {
+      // This is a basic implementation - in practice, you'd need to hook into specific test runners
+      console.log('Terminal opened - potential test run location');
+    });    // Listen for task execution which might include test runs
+    vscode.tasks.onDidStartTask((e) => {
+      const taskName = e.execution.task.name;
+      if (taskName.toLowerCase().includes('test') || taskName.toLowerCase().includes('spec')) {
+        this.logTestRunInitiated(
+          `task: ${taskName}`,
+          `Task execution: ${taskName}`
+        );
+      }
+    });
+
+    vscode.tasks.onDidEndTask((e) => {
+      const taskName = e.execution.task.name;
+      if (taskName.toLowerCase().includes('test') || taskName.toLowerCase().includes('spec')) {        this.logTestRunCompleted(
+          'pass', // Default to pass since we can't determine from task events
+          {
+            passCount: 0,
+            failCount: 0,
+            errorCount: 0,
+            failingTests: [],
+            erroringTests: []
+          }
+        );
+      }
+    });
+  }
+
+  // Public methods for logging specific events
+
+  public async logSuggestionProvided(
+    suggestionId: string,
+    suggestionSource: string,
+    suggestionText: string,
+    context: {
+      feature: string;
+      sourceFiles: string[];
+      testFiles: string[];
+      tokenCount: number;
+    }
+  ): Promise<void> {
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'suggestion_provided',
+      suggestionId,
+      suggestionSource,
+      suggestionText,
+      context
+    } as SuggestionProvidedEvent);
+  }
+
+  public async logSuggestionInteraction(
+    suggestionId: string,
+    interactionType: 'used' | 'modified' | 'inspired' | 'ignored'
+  ): Promise<void> {
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'suggestion_interaction_event',
+      suggestionId,
+      interactionType,
+      interactionTimestamp: new Date().toISOString()
+    } as SuggestionInteractionEvent);
+  }
+
+  public async logChatQuerySent(
+    queryId: string,
+    queryText: string,
+    querySource: string,
+    linkedSuggestionId?: string
+  ): Promise<void> {
+    // Store the mapping between query and suggestion if provided
+    if (linkedSuggestionId) {
+      this.activeQueryMap.set(queryId, linkedSuggestionId);
+    }
+
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'chat_query_sent',
+      queryId,
+      queryText,
+      querySource
+    } as ChatQuerySentEvent);
+  }
+
+  public async logChatResponseReceived(
+    queryId: string,
+    responseText: string,
+    responseTokenCount?: number,
+    totalInputTokens?: number
+  ): Promise<void> {
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'chat_response_received',
+      queryId,
+      responseText,
+      responseTokenCount,
+      totalInputTokens
+    } as ChatResponseReceivedEvent);
+  }
+
+  public async logTestRunInitiated(
+    testScope: string,
+    testCommand?: string
+  ): Promise<void> {
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'test_run_initiated',
+      testScope,
+      testCommand
+    } as TestRunInitiatedEvent);
+  }
+
+  public async logTestRunCompleted(
+    overallStatus: 'pass' | 'fail' | 'error',
+    testResults: {
+      passCount: number;
+      failCount: number;
+      errorCount: number;
+      failingTests?: string[];
+      erroringTests?: string[];
+    }
+  ): Promise<void> {
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'test_run_completed',
+      overallStatus,
+      testResults
+    } as TestRunCompletedEvent);
+  }
+
+  public async logTaskStart(
+    taskId: string,
+    condition: 'LLM' | 'Traditional'
+  ): Promise<void> {
+    this.currentTaskId = taskId;
+    this.taskStartTime = Date.now();
+
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'task_start',
+      taskId,
+      condition
+    } as TaskStartEvent);
+  }
+
+  public async logTaskEnd(taskId?: string): Promise<void> {
+    const endTime = Date.now();
+    const duration = this.taskStartTime ? endTime - this.taskStartTime : 0;
+    const finalTaskId = taskId || this.currentTaskId;
+
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'task_end',
+      taskId: finalTaskId,
+      duration
+    } as TaskEndEvent);
+
+    // Reset task tracking
+    this.currentTaskId = '';
+    this.taskStartTime = 0;
+  }
+  private async logEvent(event: LogEvent): Promise<void> {
+    try {
+      // Check if logging is enabled
+      const config = vscode.workspace.getConfiguration('tddAICompanion');
+      const loggingEnabled = config.get('enableLogging', true);
+      
+      if (!loggingEnabled || !this.logFilePath) {
+        return;
+      }
+
+      // Check log level filtering
+      const logLevel = config.get('logLevel', 'standard') as string;
+      if (logLevel === 'minimal') {
+        // Only log essential events
+        const essentialEvents = ['suggestion_provided', 'suggestion_interaction_event', 'chat_query_sent', 'chat_response_received'];
+        if (!essentialEvents.includes(event.eventType)) {
+          return;
+        }
+      }
+
+      // Write event as JSON Lines format (one JSON object per line)
+      const logLine = JSON.stringify(event) + '\n';
+      fs.appendFileSync(this.logFilePath, logLine, 'utf8');
+
+      console.log(`Logged event: ${event.eventType}`, event);
+    } catch (error) {
+      console.error('Error writing to log file:', error);
+    }
+  }
+
+  // Utility methods
+  public getParticipantId(): string {
+    return this.participantId;
+  }
+
+  public getSessionId(): string {
+    return this.sessionId;
+  }
+
+  public getCurrentTaskId(): string {
+    return this.currentTaskId;
+  }
+
+  // Get suggestion ID linked to a query ID
+  public getSuggestionIdForQuery(queryId: string): string | undefined {
+    return this.activeQueryMap.get(queryId);
+  }
+  public dispose(): void {
+    if (this.fileWatcher) {
+      this.fileWatcher.dispose();
+    }
+
+    // Clean up disposables
+    this.disposables.forEach(disposable => disposable.dispose());
+    this.disposables = [];
+
+    // Log session end if there's an active task
+    if (this.currentTaskId) {
+      this.logTaskEnd();
+    }
+  }
+}

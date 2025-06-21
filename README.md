@@ -159,6 +159,40 @@ The extension now includes intelligent auto-indexing capabilities:
 
 For complete auto-indexing documentation, see [AUTO_INDEXING_SYSTEM.md](./AUTO_INDEXING_SYSTEM.md).
 
+### User Activity & AI Interaction Logging
+
+The extension includes comprehensive logging capabilities to track user interactions and AI responses:
+
+- **AI Suggestion Logging**: Records when AI suggestions are provided and user interactions with them
+- **Chat Query & Response Logging**: Tracks all chat queries sent to AI and the responses received
+- **User Feedback Logging**: Captures user feedback (thumbs up/down) on AI responses for quality improvement
+- **File Activity Logging**: Records file save events with optional content logging
+- **Test Run Logging**: Tracks test execution events and results
+- **Session Tracking**: Logs session start/end events with participant identification
+
+#### Logging Configuration
+
+Configure logging behavior through VS Code settings:
+
+- **Enable/Disable Logging**: `tddAiCompanion.enableLogging` (default: true)
+- **Log File Content**: `tddAiCompanion.logFileContent` - Include full file content in file save logs (default: false)
+- **Log Level**: `tddAiCompanion.logLevel` - Control verbosity: "debug", "info", "warn", "error" (default: "info")
+
+#### Log File Location
+
+Logs are written to `.tdd-ai-logs/tdd-ai-companion.log` in your workspace root directory in JSONL format. Each log entry includes:
+- Timestamp
+- Event type
+- Relevant data (query/response content, file paths, feedback, etc.)
+- Session and participant tracking information
+
+#### User Feedback Interface
+
+Each AI response in the chat includes a feedback section with thumbs up/down buttons:
+- Feedback is automatically saved and persists across sessions
+- Visual indicators show your previous feedback choices
+- All feedback is logged for AI model improvement
+
 ## Known Issues
 
 - This extension requires internet access to connect to Google Gemini and Pinecone services

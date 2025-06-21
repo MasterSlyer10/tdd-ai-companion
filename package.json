@@ -82,7 +82,8 @@
           "type": "string",
           "default": "",
           "description": "API key for Pinecone vector database"
-        },        "tddAICompanion.userId": {
+        },
+        "tddAICompanion.userId": {
           "type": "string",
           "default": "",
           "description": "Unique identifier for the user (automatically generated if not set)"
@@ -94,7 +95,11 @@
         },
         "tddAICompanion.indexingStrategy": {
           "type": "string",
-          "enum": ["incremental", "full", "smart"],
+          "enum": [
+            "incremental",
+            "full",
+            "smart"
+          ],
           "default": "smart",
           "enumDescriptions": [
             "Only index changed files",
@@ -134,7 +139,18 @@
           "items": {
             "type": "string"
           },
-          "default": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py", "**/*.java", "**/*.cs", "**/*.cpp", "**/*.c", "**/*.h"],
+          "default": [
+            "**/*.ts",
+            "**/*.js",
+            "**/*.tsx",
+            "**/*.jsx",
+            "**/*.py",
+            "**/*.java",
+            "**/*.cs",
+            "**/*.cpp",
+            "**/*.c",
+            "**/*.h"
+          ],
           "description": "File patterns to include in automatic indexing"
         },
         "tddAICompanion.indexExcludePatterns": {
@@ -142,12 +158,47 @@
           "items": {
             "type": "string"
           },
-          "default": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.git/**", "**/coverage/**", "**/*.min.js", "**/*.test.*", "**/*.spec.*"],
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.git/**",
+            "**/coverage/**",
+            "**/*.min.js",
+            "**/*.test.*",
+            "**/*.spec.*"
+          ],
           "description": "File patterns to exclude from automatic indexing"
-        },        "tddAICompanion.enableProgressNotifications": {
+        },
+        "tddAICompanion.enableProgressNotifications": {
           "type": "boolean",
           "default": true,
           "description": "Show progress notifications during indexing operations"
+        },
+        "tddAICompanion.enableLogging": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable logging of user interactions and AI responses"
+        },
+        "tddAICompanion.logFileContent": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include full file content in logging (WARNING: may contain sensitive information)"
+        },
+        "tddAICompanion.logLevel": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "detailed"
+          ],
+          "default": "standard",
+          "enumDescriptions": [
+            "Only log essential events (suggestions, feedback)",
+            "Log most user interactions and AI responses",
+            "Log all events including file changes and detailed context"
+          ],
+          "description": "Level of detail for logging"
         },
         "tddAICompanion.batchSize": {
           "type": "number",
@@ -176,7 +227,7 @@
     "@typescript-eslint/parser": "^8.22.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^3.4.2",
+    "@vscode/vsce": "^3.5.0",
     "eslint": "^9.19.0",
     "sinon": "^17.0.1",
     "typescript": "^5.7.3"

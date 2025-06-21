@@ -2,21 +2,26 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { SidebarProvider } from "./SidebarProvider";
 import { RAGService } from "./ragService";
+import { LoggingService } from "./loggingService";
 import { SUPPORTED_EXTENSIONS } from "./codeParser";
 
 let sidebarProvider: SidebarProvider;
 let ragService: RAGService;
+let loggingService: LoggingService;
 let typingTimeout: NodeJS.Timeout | undefined;
 
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
   console.log("TDD AI Companion is now active!");
 
+  // Initialize the logging service
+  loggingService = new LoggingService(context);
+
   // Initialize the RAG service
   ragService = new RAGService();
 
   // Initialize the sidebar
-  sidebarProvider = new SidebarProvider(context.extensionUri, context, ragService);
+  sidebarProvider = new SidebarProvider(context.extensionUri, context, ragService, loggingService);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       SidebarProvider.viewType,
@@ -78,8 +83,10 @@ export function activate(context: vscode.ExtensionContext) {
           location: vscode.ProgressLocation.Notification,
           title: "Generating test suggestions...",
           cancellable: true, // Make progress cancellable, though primary cancellation is via Stop button
-        },
-        async (progress, progressToken) => { // progressToken is from withProgress
+        },        async (progress, progressToken) => { // progressToken is from withProgress
+          // Generate a unique query ID for this interaction
+          const queryId = promptId || `query_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
           // Link the progressToken with the sidebarCancellationToken if provided
           // This allows cancelling via VS Code's progress UI as well, if desired.
           if (cancellationToken) {
@@ -109,6 +116,14 @@ export function activate(context: vscode.ExtensionContext) {
             sidebarProvider.cancelCurrentRequest(); // Trigger our main cancellation
             // No need to dispose progressTokenDisposable here, it's done in finally
           });          try {
+            // Log the chat query
+            await loggingService.logChatQuerySent(
+              queryId,
+              userMessage,
+              'suggest_test_button', // This comes from the suggest test button
+              queryId // Use queryId as suggestionId for linking
+            );
+
             // Add the user message to history before making the API call
             sidebarProvider.addUserMessage(userMessage);
 
@@ -180,11 +195,30 @@ export function activate(context: vscode.ExtensionContext) {
             // We don't need to call addResponse here as the chunks have been sent directly,
             // but we do need to inform the sidebar about response metrics
             const responseTokenCount = Math.ceil(responseText.length / 4);
-            const totalInputTokens = Math.ceil(JSON.stringify(llmInputPayload).length / 4);
-
-            // Update the conversation history with the complete response
+            const totalInputTokens = Math.ceil(JSON.stringify(llmInputPayload).length / 4);            // Update the conversation history with the complete response
             // Only if not cancelled
             if (!abortController.signal.aborted) {
+              // Log the chat response
+              await loggingService.logChatResponseReceived(
+                queryId,
+                responseText,
+                responseTokenCount,
+                totalInputTokens
+              );
+
+              // Log the suggestion provided
+              await loggingService.logSuggestionProvided(
+                queryId, // Use queryId as suggestionId
+                'suggest_test_button',
+                responseText,
+                {
+                  feature: sidebarProvider.getCurrentFeature(),
+                  sourceFiles: sidebarProvider.getSourceFiles().map(f => f.fsPath),
+                  testFiles: sidebarProvider.getTestFiles().map(f => f.fsPath),
+                  tokenCount: responseTokenCount + totalInputTokens
+                }
+              );
+
               sidebarProvider.updateLastResponse(responseText, responseTokenCount, totalInputTokens, promptId); // Pass promptId
             }
           } catch (error: any) {
@@ -968,6 +1002,11 @@ async function formatCodeFilesToJson(fileUris: vscode.Uri[]): Promise<string> {
 }
 
 export function deactivate() {
+  // Dispose of the logging service
+  if (loggingService) {
+    loggingService.dispose();
+  }
+  
   // Dispose of the file system watcher
   // The watcher is automatically disposed when its containing extension is deactivated
   // because it was added to context.subscriptions.

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { RAGService, IndexingProgress } from "./ragService";
+import { LoggingService } from "./loggingService";
 
 interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -15,9 +16,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private _currentFeature: string = "";
   private _sourceFiles: vscode.Uri[] = [];
   private _testFiles: vscode.Uri[] = []; // New: Test files
-
   private _context: vscode.ExtensionContext;
   private _ragService: RAGService;
+  private _loggingService: LoggingService;
 
   private _checkedItems: string[] = []; // For source files
   private _checkedTestItems: string[] = []; // For test files
@@ -31,9 +32,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly _extensionUri: vscode.Uri,
     context: vscode.ExtensionContext,
-    ragService: RAGService // Add RAGService here
+    ragService: RAGService, // Add RAGService here
+    loggingService: LoggingService // Add LoggingService here
   ) {    this._context = context;
     this._ragService = ragService; // Store it
+    this._loggingService = loggingService; // Store it
 
     // Progress callback removed - debug UI cleanup
 
@@ -277,6 +280,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           break;        case "userFeedback":
           // Handle user feedback data for analytics/logging
           console.log(`User feedback received for message ${message.messageId}:`, message.feedback);
+          
+          // Log the suggestion interaction
+          await this._loggingService.logSuggestionInteraction(
+            message.messageId, // Use messageId as suggestionId
+            message.feedback.value as 'used' | 'modified' | 'inspired' | 'ignored'
+          );
           
           // You can extend this to store feedback data in workspace state or send to analytics
           // For now, we'll just log it
