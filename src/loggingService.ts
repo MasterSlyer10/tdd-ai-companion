@@ -50,6 +50,8 @@ export interface FileSavedEvent extends BaseEvent {
   filePath: string;
   fileType: 'source' | 'test' | 'other';
   fileContent?: string; // Optional: full content or diff
+  isSelectedFile?: boolean; // Whether this file is part of user's selected source/test files
+  selectedFileType?: 'source' | 'test'; // Which type of selected file this is
 }
 
 export interface TestRunInitiatedEvent extends BaseEvent {
@@ -109,6 +111,10 @@ export class LoggingService {
   private fileWatcher?: vscode.FileSystemWatcher;
   private activeQueryMap: Map<string, string> = new Map(); // queryId -> suggestionId mapping
   private disposables: vscode.Disposable[] = []; // For cleanup
+  
+  // Track selected files for more targeted logging
+  private selectedSourceFiles: Set<string> = new Set(); // Set of file paths
+  private selectedTestFiles: Set<string> = new Set(); // Set of file paths
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -144,8 +150,12 @@ export class LoggingService {
       this.logFilePath = path.join(logDir, `tdd-ai-log-${this.sessionId}.jsonl`);
     }    // Set up file watchers for development activity logging
     const logLevel = config.get('logLevel', 'standard') as string;
-    if (logLevel === 'detailed') {
+    console.log('[LoggingService] Current log level:', logLevel);
+    if (logLevel === 'detailed' || logLevel === 'standard') {
+      console.log('[LoggingService] Setting up file watchers...');
       this.setupFileWatchers();
+    } else {
+      console.log('[LoggingService] File watchers disabled for log level:', logLevel);
     }
 
     // Log session start
@@ -163,43 +173,62 @@ export class LoggingService {
     const random = Math.random().toString(36).substr(2, 9);
     return `${prefix}_${timestamp}_${random}`;
   }
-
   private setupFileWatchers(): void {
     // Watch for file saves in the workspace
     if (vscode.workspace.workspaceFolders) {
+      console.log('[LoggingService] Setting up file watchers for workspace:', vscode.workspace.workspaceFolders[0].uri.fsPath);
       this.fileWatcher = vscode.workspace.createFileSystemWatcher('**/*');
       
       // Listen for file changes (saves)
       this.fileWatcher.onDidChange(async (uri) => {
+        console.log('[LoggingService] File changed:', uri.fsPath);
         await this.handleFileSaved(uri);
       });
 
       this.fileWatcher.onDidCreate(async (uri) => {
+        console.log('[LoggingService] File created:', uri.fsPath);
         await this.handleFileSaved(uri);
       });
+    } else {
+      console.log('[LoggingService] No workspace folders found, file watching disabled');
     }
 
     // Listen for test runs (this might need integration with specific test runners)
     this.setupTestRunListeners();
-  }
-
-  private async handleFileSaved(uri: vscode.Uri): Promise<void> {
+  }  private async handleFileSaved(uri: vscode.Uri): Promise<void> {
     try {
       const filePath = uri.fsPath;
       const fileName = path.basename(filePath);
       
+      console.log('[LoggingService] handleFileSaved called for:', filePath);
+      
       // Skip log files and other non-relevant files
       if (fileName.includes('.tdd-ai-log') || fileName.startsWith('.')) {
+        console.log('[LoggingService] Skipping file (log file or hidden):', fileName);
+        return;
+      }      // Determine file type
+      // REMOVED - we now only use selectedFileType since we only log selected files// Check if this file is part of user's selected files
+      let isSelectedFile = false;
+      let selectedFileType: 'source' | 'test' | undefined;
+      
+      if (this.selectedSourceFiles.has(filePath)) {
+        isSelectedFile = true;
+        selectedFileType = 'source';
+      } else if (this.selectedTestFiles.has(filePath)) {
+        isSelectedFile = true;
+        selectedFileType = 'test';
+      }
+
+      // ONLY log files that are part of user's selected source or test files
+      if (!isSelectedFile) {
+        console.log('[LoggingService] Skipping file (not selected by user):', filePath);
         return;
       }
 
-      // Determine file type
-      let fileType: 'source' | 'test' | 'other' = 'other';
-      if (fileName.includes('.test.') || fileName.includes('.spec.') || filePath.includes('/test/') || filePath.includes('\\test\\')) {
-        fileType = 'test';
-      } else if (fileName.endsWith('.ts') || fileName.endsWith('.js') || fileName.endsWith('.py') || fileName.endsWith('.java')) {
-        fileType = 'source';
-      }
+      console.log('[LoggingService] Logging selected file save:', filePath, 'type:', selectedFileType);
+
+      // Use the selected file type for logging
+      let fileType: 'source' | 'test' | 'other' = selectedFileType || 'other';
 
       // Read file content (optional - can be disabled for privacy)
       let fileContent: string | undefined;
@@ -213,17 +242,19 @@ export class LoggingService {
         } catch (error) {
           console.warn('Could not read file content for logging:', error);
         }
-      }
-
-      await this.logEvent({
+      }      await this.logEvent({
         timestamp: new Date().toISOString(),
         participantId: this.participantId,
         sessionId: this.sessionId,
         eventType: 'file_saved',
         filePath: filePath,
         fileType: fileType,
-        fileContent: fileContent
+        fileContent: fileContent,
+        isSelectedFile: true, // Always true since we only get here for selected files
+        selectedFileType: selectedFileType
       } as FileSavedEvent);
+      
+      console.log('[LoggingService] Successfully logged file save event for selected file:', filePath);
     } catch (error) {
       console.error('Error logging file save event:', error);
     }
@@ -431,17 +462,29 @@ export class LoggingService {
       
       if (!loggingEnabled || !this.logFilePath) {
         return;
-      }
-
-      // Check log level filtering
+      }      // Check log level filtering
       const logLevel = config.get('logLevel', 'standard') as string;
       if (logLevel === 'minimal') {
         // Only log essential events
-        const essentialEvents = ['suggestion_provided', 'suggestion_interaction_event', 'chat_query_sent', 'chat_response_received'];
+        const essentialEvents = ['suggestion_provided', 'suggestion_interaction_event', 'chat_query_sent', 'chat_response_received', 'user_feedback'];
         if (!essentialEvents.includes(event.eventType)) {
+          console.log(`[LoggingService] Event ${event.eventType} filtered out by minimal log level`);
+          return;
+        }
+      } else if (logLevel === 'standard') {
+        // Log most user interactions and AI responses (including file saves)
+        const standardEvents = [
+          'suggestion_provided', 'suggestion_interaction_event', 
+          'chat_query_sent', 'chat_response_received', 'user_feedback',
+          'file_saved', 'test_run_initiated', 'test_run_completed',
+          'experiment_session_start', 'task_start', 'task_end'
+        ];
+        if (!standardEvents.includes(event.eventType)) {
+          console.log(`[LoggingService] Event ${event.eventType} filtered out by standard log level`);
           return;
         }
       }
+      // 'detailed' level logs everything
 
       // Write event as JSON Lines format (one JSON object per line)
       const logLine = JSON.stringify(event) + '\n';
@@ -470,6 +513,27 @@ export class LoggingService {
   public getSuggestionIdForQuery(queryId: string): string | undefined {
     return this.activeQueryMap.get(queryId);
   }
+
+  // Methods to update selected files for targeted logging
+  public updateSelectedSourceFiles(sourceFiles: string[]): void {
+    this.selectedSourceFiles.clear();
+    sourceFiles.forEach(filePath => {
+      this.selectedSourceFiles.add(filePath);
+    });
+  }
+
+  public updateSelectedTestFiles(testFiles: string[]): void {
+    this.selectedTestFiles.clear();
+    testFiles.forEach(filePath => {
+      this.selectedTestFiles.add(filePath);
+    });
+  }
+
+  public updateSelectedFiles(sourceFiles: string[], testFiles: string[]): void {
+    this.updateSelectedSourceFiles(sourceFiles);
+    this.updateSelectedTestFiles(testFiles);
+  }
+
   public dispose(): void {
     if (this.fileWatcher) {
       this.fileWatcher.dispose();

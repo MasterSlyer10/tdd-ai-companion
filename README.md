@@ -181,6 +181,7 @@ Configure logging behavior through VS Code settings:
 #### Log File Location
 
 Logs are written to `.tdd-ai-logs/tdd-ai-companion.log` in your workspace root directory in JSONL format. Each log entry includes:
+
 - Timestamp
 - Event type
 - Relevant data (query/response content, file paths, feedback, etc.)
@@ -189,6 +190,7 @@ Logs are written to `.tdd-ai-logs/tdd-ai-companion.log` in your workspace root d
 #### User Feedback Interface
 
 Each AI response in the chat includes a feedback section with thumbs up/down buttons:
+
 - Feedback is automatically saved and persists across sessions
 - Visual indicators show your previous feedback choices
 - All feedback is logged for AI model improvement

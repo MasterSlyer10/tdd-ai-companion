@@ -28,7 +28,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private _cancellationTokenSource?: vscode.CancellationTokenSource;
   private _isCurrentRequestCancelled: boolean = false; // Add internal cancellation flag
   // Enhanced indexing status tracking - REMOVED FOR DEBUG UI CLEANUP
-
   constructor(
     private readonly _extensionUri: vscode.Uri,
     context: vscode.ExtensionContext,
@@ -42,6 +41,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     // Load the stuff from previous session
     this.loadState();
+    
+    // Initialize logging service with selected files after loading state
+    this.updateLoggingServiceFiles();
   }
 
   // Add a method to get conversation history for the LLM
@@ -335,11 +337,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     console.log("[SidebarProvider] finalizeRequest END.");
   }
 
-
   public updateSourceFiles(files: vscode.Uri[]) {
     this._sourceFiles = files;
     this.postSourceFilesUpdate();
     this.saveState();
+    
+    // Update logging service with selected files
+    this.updateLoggingServiceFiles();
   }
 
 
@@ -432,13 +436,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   public getTestFiles(): vscode.Uri[] {
     return this._testFiles;
   }
-
   public updateTestFiles(files: vscode.Uri[]) {
     this._testFiles = files;
     this.postTestFilesUpdate();
     this.saveState();
-  }
-  public async addTestFile(file: vscode.Uri) {
+    
+    // Update logging service with selected files
+    this.updateLoggingServiceFiles();
+  }  public async addTestFile(file: vscode.Uri) {
     if (!this._testFiles.some((f) => f.fsPath === file.fsPath)) {
       this._testFiles.push(file);
       // Also add to checked test items
@@ -446,12 +451,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         // Update RAG service with new file selection
       await this.updateRAGServiceSelection();
       
+      // Update logging service with selected files
+      this.updateLoggingServiceFiles();
+      
       this.postTestFilesUpdate();
       this.postCheckedTestItemsUpdate(); // Notify webview about checked test items
       this.saveState();
     }
   }
-
   public async removeTestFile(file: vscode.Uri) {
     this._testFiles = this._testFiles.filter(
       (f) => f.fsPath !== file.fsPath
@@ -461,6 +468,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     
     // Update RAG service with new file selection
     await this.updateRAGServiceSelection();
+    
+    // Update logging service with selected files
+    this.updateLoggingServiceFiles();
     
     this.postTestFilesUpdate();
     this.postCheckedTestItemsUpdate(); // Notify webview about checked test items
@@ -542,12 +552,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     // Check if the difference is significant (more than 20% difference)
     const difference = Math.abs(files.length - status.indexedFilesCount);
     const threshold = Math.max(1, Math.floor(files.length * 0.2));
-    
-    return difference > threshold;
+      return difference > threshold;
   }
 
-
-
+  /**
+   * Update logging service with current file selection for targeted logging
+   */
+  private updateLoggingServiceFiles(): void {
+    const sourceFilePaths = this._sourceFiles.map(file => file.fsPath);
+    const testFilePaths = this._testFiles.map(file => file.fsPath);
+    
+    this._loggingService.updateSelectedFiles(sourceFilePaths, testFilePaths);
+  }
 
   public getCurrentFeature(): string {
     return this._currentFeature;
@@ -654,12 +670,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       return true;
     }
     
-    return false;
-  }  private async addSourceFile(file: vscode.Uri) {
+    return false;  }  private async addSourceFile(file: vscode.Uri) {
     if (!this._sourceFiles.some((f) => f.fsPath === file.fsPath)) {
       this._sourceFiles.push(file);
         // Update RAG service with new file selection
       await this.updateRAGServiceSelection();
+      
+      // Update logging service with selected files
+      this.updateLoggingServiceFiles();
       
       this.postSourceFilesUpdate();
       this.saveState();
@@ -674,9 +692,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     );
     // Also remove from checked items
     this._checkedItems = this._checkedItems.filter(itemPath => itemPath !== file.fsPath);
-    
-    // Update RAG service with new file selection
+      // Update RAG service with new file selection
     await this.updateRAGServiceSelection();
+    
+    // Update logging service with selected files
+    this.updateLoggingServiceFiles();
     
     // Send updated checked items to webview
     if (this._view) {
