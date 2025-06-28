@@ -336,9 +336,26 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     // or by the 'addResponse' handler (if completed).
     console.log("[SidebarProvider] finalizeRequest END.");
   }
-
-  public updateSourceFiles(files: vscode.Uri[]) {
+  public async updateSourceFiles(files: vscode.Uri[]) {
+    const oldFiles = this._sourceFiles.map(f => f.fsPath);
+    const newFiles = files.map(f => f.fsPath);
+    
+    const addedFiles = newFiles.filter(f => !oldFiles.includes(f));
+    const removedFiles = oldFiles.filter(f => !newFiles.includes(f));
+    
     this._sourceFiles = files;
+    
+    // Log bulk file selection change if there are changes
+    if (addedFiles.length > 0 || removedFiles.length > 0) {
+      await this._loggingService.logBulkFileSelection(
+        'source_files_updated',
+        addedFiles,
+        removedFiles,
+        newFiles,
+        this._testFiles.map(f => f.fsPath)
+      );
+    }
+    
     this.postSourceFilesUpdate();
     this.saveState();
     
@@ -435,21 +452,47 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   public getTestFiles(): vscode.Uri[] {
     return this._testFiles;
-  }
-  public updateTestFiles(files: vscode.Uri[]) {
+  }  public async updateTestFiles(files: vscode.Uri[]) {
+    const oldFiles = this._testFiles.map(f => f.fsPath);
+    const newFiles = files.map(f => f.fsPath);
+    
+    const addedFiles = newFiles.filter(f => !oldFiles.includes(f));
+    const removedFiles = oldFiles.filter(f => !newFiles.includes(f));
+    
     this._testFiles = files;
+    
+    // Log bulk file selection change if there are changes
+    if (addedFiles.length > 0 || removedFiles.length > 0) {
+      await this._loggingService.logBulkFileSelection(
+        'test_files_updated',
+        addedFiles,
+        removedFiles,
+        this._sourceFiles.map(f => f.fsPath),
+        newFiles
+      );
+    }
+    
     this.postTestFilesUpdate();
     this.saveState();
     
     // Update logging service with selected files
     this.updateLoggingServiceFiles();
-  }  public async addTestFile(file: vscode.Uri) {
+  }public async addTestFile(file: vscode.Uri) {
     if (!this._testFiles.some((f) => f.fsPath === file.fsPath)) {
       this._testFiles.push(file);
       // Also add to checked test items
       this._checkedTestItems.push(file.fsPath);
         // Update RAG service with new file selection
       await this.updateRAGServiceSelection();
+      
+      // Log file selection event
+      await this._loggingService.logFileSelection(
+        'selected',
+        'test',
+        file.fsPath,
+        this._sourceFiles.map(f => f.fsPath),
+        this._testFiles.map(f => f.fsPath)
+      );
       
       // Update logging service with selected files
       this.updateLoggingServiceFiles();
@@ -458,8 +501,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this.postCheckedTestItemsUpdate(); // Notify webview about checked test items
       this.saveState();
     }
-  }
-  public async removeTestFile(file: vscode.Uri) {
+  }  public async removeTestFile(file: vscode.Uri) {
     this._testFiles = this._testFiles.filter(
       (f) => f.fsPath !== file.fsPath
     );
@@ -468,6 +510,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     
     // Update RAG service with new file selection
     await this.updateRAGServiceSelection();
+    
+    // Log file deselection event
+    await this._loggingService.logFileSelection(
+      'deselected',
+      'test',
+      file.fsPath,
+      this._sourceFiles.map(f => f.fsPath),
+      this._testFiles.map(f => f.fsPath)
+    );
     
     // Update logging service with selected files
     this.updateLoggingServiceFiles();
@@ -676,6 +727,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         // Update RAG service with new file selection
       await this.updateRAGServiceSelection();
       
+      // Log file selection event
+      await this._loggingService.logFileSelection(
+        'selected',
+        'source',
+        file.fsPath,
+        this._sourceFiles.map(f => f.fsPath),
+        this._testFiles.map(f => f.fsPath)
+      );
+      
       // Update logging service with selected files
       this.updateLoggingServiceFiles();
       
@@ -685,7 +745,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       // Indexing status removed - debug UI cleanup
     }
   }
-
   private async removeSourceFile(file: vscode.Uri) {
     this._sourceFiles = this._sourceFiles.filter(
       (f) => f.fsPath !== file.fsPath
@@ -694,6 +753,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._checkedItems = this._checkedItems.filter(itemPath => itemPath !== file.fsPath);
       // Update RAG service with new file selection
     await this.updateRAGServiceSelection();
+    
+    // Log file deselection event
+    await this._loggingService.logFileSelection(
+      'deselected',
+      'source',
+      file.fsPath,
+      this._sourceFiles.map(f => f.fsPath),
+      this._testFiles.map(f => f.fsPath)
+    );
     
     // Update logging service with selected files
     this.updateLoggingServiceFiles();

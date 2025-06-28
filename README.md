@@ -166,7 +166,8 @@ The extension includes comprehensive logging capabilities to track user interact
 - **AI Suggestion Logging**: Records when AI suggestions are provided and user interactions with them
 - **Chat Query & Response Logging**: Tracks all chat queries sent to AI and the responses received
 - **User Feedback Logging**: Captures user feedback (thumbs up/down) on AI responses for quality improvement
-- **File Activity Logging**: Records file save events with optional content logging
+- **File Activity Logging**: Records file save events with optional content logging (only for user-selected files)
+- **📁 File Selection Logging**: Tracks when users select/deselect source and test files, including bulk operations
 - **Test Run Logging**: Tracks test execution events and results
 - **Session Tracking**: Logs session start/end events with participant identification
 

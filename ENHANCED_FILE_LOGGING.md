@@ -174,3 +174,14 @@ Changed the file save detection to **only log files that users have explicitly s
 - Eliminates all noise from random workspace file changes, configuration updates, log files, etc.
 
 This provides researchers with much more precise data about user TDD workflows while maintaining the existing privacy and performance characteristics of the logging system.
+
+## 🆕 Related Feature: File Selection Logging
+
+In addition to file save logging, the system now also tracks **when users select and deselect files**:
+
+- **Individual Selection**: Logs each time a user adds or removes a single source/test file
+- **Bulk Operations**: Logs when users update multiple files at once  
+- **Complete Context**: Each event includes the full current selection state
+- **Research Value**: Provides insights into how developers organize their TDD projects
+
+See [FILE_SELECTION_LOGGING.md](./FILE_SELECTION_LOGGING.md) for complete details on file selection tracking.

@@ -89,6 +89,35 @@ export interface TaskEndEvent extends BaseEvent {
   duration: number; // in milliseconds
 }
 
+export interface FileSelectionEvent extends BaseEvent {
+  eventType: 'file_selection_changed';
+  action: 'selected' | 'deselected';
+  fileType: 'source' | 'test';
+  filePath: string;
+  fileName: string;
+  currentSelection: {
+    sourceFiles: string[];
+    testFiles: string[];
+    totalSourceFiles: number;
+    totalTestFiles: number;
+  };
+}
+
+export interface BulkFileSelectionEvent extends BaseEvent {
+  eventType: 'bulk_file_selection';
+  action: 'source_files_updated' | 'test_files_updated' | 'all_files_updated';
+  changes: {
+    added: string[];
+    removed: string[];
+  };
+  currentSelection: {
+    sourceFiles: string[];
+    testFiles: string[];
+    totalSourceFiles: number;
+    totalTestFiles: number;
+  };
+}
+
 export type LogEvent = 
   | SuggestionProvidedEvent
   | SuggestionInteractionEvent
@@ -99,7 +128,9 @@ export type LogEvent =
   | TestRunCompletedEvent
   | ExperimentSessionStartEvent
   | TaskStartEvent
-  | TaskEndEvent;
+  | TaskEndEvent
+  | FileSelectionEvent
+  | BulkFileSelectionEvent;
 
 export class LoggingService {
   private context: vscode.ExtensionContext;
@@ -454,6 +485,60 @@ export class LoggingService {
     this.currentTaskId = '';
     this.taskStartTime = 0;
   }
+
+  public async logFileSelection(
+    action: 'selected' | 'deselected',
+    fileType: 'source' | 'test',
+    filePath: string,
+    currentSourceFiles: string[],
+    currentTestFiles: string[]
+  ): Promise<void> {
+    const fileName = path.basename(filePath);
+    
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'file_selection_changed',
+      action,
+      fileType,
+      filePath,
+      fileName,
+      currentSelection: {
+        sourceFiles: currentSourceFiles,
+        testFiles: currentTestFiles,
+        totalSourceFiles: currentSourceFiles.length,
+        totalTestFiles: currentTestFiles.length
+      }
+    } as FileSelectionEvent);
+  }
+
+  public async logBulkFileSelection(
+    action: 'source_files_updated' | 'test_files_updated' | 'all_files_updated',
+    addedFiles: string[],
+    removedFiles: string[],
+    currentSourceFiles: string[],
+    currentTestFiles: string[]
+  ): Promise<void> {
+    await this.logEvent({
+      timestamp: new Date().toISOString(),
+      participantId: this.participantId,
+      sessionId: this.sessionId,
+      eventType: 'bulk_file_selection',
+      action,
+      changes: {
+        added: addedFiles,
+        removed: removedFiles
+      },
+      currentSelection: {
+        sourceFiles: currentSourceFiles,
+        testFiles: currentTestFiles,
+        totalSourceFiles: currentSourceFiles.length,
+        totalTestFiles: currentTestFiles.length
+      }
+    } as BulkFileSelectionEvent);
+  }
+
   private async logEvent(event: LogEvent): Promise<void> {
     try {
       // Check if logging is enabled
@@ -471,13 +556,13 @@ export class LoggingService {
           console.log(`[LoggingService] Event ${event.eventType} filtered out by minimal log level`);
           return;
         }
-      } else if (logLevel === 'standard') {
-        // Log most user interactions and AI responses (including file saves)
+      } else if (logLevel === 'standard') {        // Log most user interactions and AI responses (including file saves)
         const standardEvents = [
           'suggestion_provided', 'suggestion_interaction_event', 
           'chat_query_sent', 'chat_response_received', 'user_feedback',
           'file_saved', 'test_run_initiated', 'test_run_completed',
-          'experiment_session_start', 'task_start', 'task_end'
+          'experiment_session_start', 'task_start', 'task_end',
+          'file_selection_changed', 'bulk_file_selection'
         ];
         if (!standardEvents.includes(event.eventType)) {
           console.log(`[LoggingService] Event ${event.eventType} filtered out by standard log level`);
