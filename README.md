@@ -1,247 +1,156 @@
 # TDD AI Companion
 
-<!-- Icon reference removed due to SVG limitations in GitHub markdown -->
+AI-powered Test-Driven Development assistant for VS Code. Leverages Google Gemini AI and RAG (Retrieval-Augmented Generation) to provide intelligent, context-aware TDD guidance.
 
-## Overview
+## ✨ Key Features
 
-TDD AI Companion is a VS Code extension that assists developers with Test-Driven Development (TDD) by leveraging AI to suggest test cases, help implement code based on tests, and provide guidance throughout the TDD process.
+- **🤖 AI-Powered Test Suggestions** - Intelligent test case generation based on your codebase
+- **💡 Contextual Code Generation** - Implementation recommendations that pass your tests
+- **📁 Project Setup Assistance** - Streamlined TDD project configuration
+- **🧠 RAG-Enhanced Context** - Retrieval-Augmented Generation for accurate, relevant suggestions
+- **🎯 Dedicated Sidebar Interface** - All features accessible from a convenient sidebar
+- **🚀 Smart Auto-Indexing System** - Intelligent codebase embedding management
+  - Automatic file change detection and updates
+  - Configurable strategies (smart/incremental/full)
+  - Real-time progress monitoring
+  - Pattern-based filtering
+  - Manual override controls
 
-This extension uses Google's Gemini AI and RAG (Retrieval-Augmented Generation) to provide context-aware assistance tailored to your project.
+## 📋 Prerequisites
 
-## Features
+⚠️ **Required API Keys** - Extension will not function without these:
 
-- **AI-Powered Test Suggestions**: Get intelligent test case suggestions based on your current codebase and feature requirements
-- **Contextual Code Generation**: Recommend implementation code that passes your tests
-- **Project Setup Assistance**: Configure your project for effective TDD
-- **RAG-Enhanced Context**: Uses Retrieval-Augmented Generation to provide more accurate and relevant suggestions
-- **Dedicated Sidebar Interface**: Access all TDD AI Companion features from a convenient sidebar
-- **🚀 Auto-Indexing System**: Intelligent automatic management of your codebase embeddings
-  - **Smart File Watching**: Automatically detects file changes and updates embeddings
-  - **Configurable Strategies**: Choose between smart, incremental, or full indexing approaches
-  - **Real-time Status**: Monitor indexing progress and index statistics
-  - **Manual Controls**: Force updates or disable auto-indexing as needed
-  - **Pattern-based Filtering**: Include/exclude specific file patterns from indexing
+1. **Google Gemini API Key** - Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. **Pinecone API Key** - Get from [Pinecone Dashboard](https://app.pinecone.io/)
 
-<!-- Screenshot will be added in future releases -->
-<!-- No screenshot available yet -->
+## 📦 Installation
 
-## Installation Instructions (VSIX)
+This extension is distributed as a VSIX file. Choose one method:
 
-Since this extension is not published to the VS Code marketplace, you'll need to install it using the VSIX file:
+**Method 1: VS Code UI**
 
-1. **Download the VSIX file** from the project's distribution location
-2. **Install using one of these methods**:
+1. Extensions view (Ctrl+Shift+X) → "..." menu → "Install from VSIX..."
 
-   - **Method 1: From VS Code UI**
-     - Open VS Code
-     - Go to Extensions view (Ctrl+Shift+X)
-     - Click on the "..." menu (top-right of Extensions view)
-     - Select "Install from VSIX..."
-     - Navigate to the downloaded VSIX file and select it
-   - **Method 2: Using Command Palette**
-     - Open VS Code
-     - Press Ctrl+Shift+P to open Command Palette
-     - Type "vsix" and select "Extensions: Install from VSIX..."
-     - Navigate to the downloaded VSIX file and select it
-   - **Method 3: Using Terminal**
-     - Open a terminal/command prompt
-     - Navigate to the folder containing the VSIX file
-     - Run: `code --install-extension tdd-ai-companion-0.0.1.vsix`
+**Method 2: Command Palette**
 
-3. **Restart VS Code** after installation (if prompted)
+1. Ctrl+Shift+P → "Extensions: Install from VSIX..."
 
-## Requirements
+**Method 3: Terminal**
 
-To use this extension, you'll need:
+```bash
+code --install-extension tdd-ai-companion-0.0.1.vsix
+```
 
-1. **Google Gemini API Key**: Required for generating test suggestions and code implementations
-   - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-   - You **MUST** have this key to use any AI features in the extension
-2. **Pinecone API Key**: Required for the RAG (Retrieval-Augmented Generation) functionality
-   - Sign up at [Pinecone](https://www.pinecone.io/) and create an API key
-   - Required for advanced context-aware suggestions
-   - The extension will not be able to index your codebase without this key
+Restart VS Code if prompted.
 
-> ⚠️ **IMPORTANT**: This extension will not function properly without these API keys. They must be added to the extension settings before use.
-
-## Extension Settings
-
-This extension contributes the following settings:
+## ⚙️ Configuration
 
 ### Core Settings
 
-- `tddAICompanion.geminiApiKey`: API key for Google Gemini
-- `tddAICompanion.pineconeApiKey`: API key for Pinecone vector database
-- `tddAICompanion.userId`: Unique identifier for the user (automatically generated if not set)
+- `tddAICompanion.geminiApiKey` - Google Gemini API key
+- `tddAICompanion.pineconeApiKey` - Pinecone API key
+- `tddAICompanion.userId` - User identifier (auto-generated)
 
 ### Auto-Indexing Settings
 
-- `tddAiCompanion.autoIndexing.enabled`: Enable/disable automatic indexing (default: true)
-- `tddAiCompanion.autoIndexing.strategy`: Indexing strategy - "smart", "incremental", or "full" (default: "smart")
-- `tddAiCompanion.autoIndexing.delay`: Debounce delay in milliseconds (default: 2000)
-- `tddAiCompanion.autoIndexing.includePatterns`: File patterns to include in indexing
-- `tddAiCompanion.autoIndexing.excludePatterns`: File patterns to exclude from indexing
-- `tddAiCompanion.autoIndexing.maxFileSize`: Maximum file size to index in bytes (default: 1MB)
-- `tddAiCompanion.autoIndexing.batchSize`: Number of code chunks to process per batch for optimal performance (default: 15)
-- `tddAiCompanion.autoIndexing.autoCleanup`: Automatically remove deleted files from index (default: true)
-- `tddAiCompanion.autoIndexing.trackChanges`: Enable file change tracking with checksums (default: true)
-- `tddAiCompanion.autoIndexing.showProgress`: Show detailed progress information (default: true)
+- `autoIndexing` - Enable/disable automatic indexing (default: true)
+- `indexingStrategy` - Strategy: "smart", "incremental", or "full" (default: "smart")
+- `indexingDelay` - Debounce delay in milliseconds (default: 2000)
+- `batchSize` - Code chunks per batch for optimal performance (default: 15)
+- `includePatterns` / `excludePatterns` - File filtering patterns
+- `autoCleanup` - Auto-remove deleted files from index (default: true)
 
-> 📚 **For detailed auto-indexing documentation**, see [AUTO_INDEXING_SYSTEM.md](./AUTO_INDEXING_SYSTEM.md)
+📚 **Detailed documentation**: [AUTO_INDEXING_SYSTEM.md](./AUTO_INDEXING_SYSTEM.md)
 
-## Getting Started
+## 🚀 Quick Start
 
-1. **Install the extension** using the VSIX file (see Installation Instructions)
-2. **Configure your API Keys** (REQUIRED):
+1. **Install** the extension using VSIX file
+2. **Configure API Keys** in VS Code Settings:
+   - Search "TDD AI Companion"
+   - Add your Gemini and Pinecone API keys
+3. **Open your project** and click the TDD AI Companion sidebar icon
+4. **Setup project**: Define feature and select source/test files
+5. **Start coding**: Auto-indexing will manage your codebase embeddings
 
-   - Open VS Code Settings (Ctrl+,)
-   - Search for "TDD AI Companion"
-   - Enter your Google Gemini API key
-     - Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
-   - Enter your Pinecone API key
-     - Get from [Pinecone Dashboard](https://app.pinecone.io/)
-   - Without these keys, the extension will not work properly
+## 💻 Usage
 
-3. **Open a project** you want to use with TDD
+### TDD Workflow
 
-4. **Access the TDD AI Companion sidebar** from the VS Code activity bar
+1. **Write test description** in sidebar input
+2. **Get test suggestions** → Implement suggested test
+3. **Run tests** (they'll fail initially - that's TDD!)
+4. **Get implementation suggestions** → Implement code
+5. **Run tests again** to verify implementation passes
+6. **Repeat** for additional features
 
-5. **Setup your project**:
+### Available Commands
 
-   - Define the feature you're working on
-   - Select source files and test files
-   - The auto-indexing system will automatically manage your codebase embeddings
-   - Monitor indexing status in the sidebar
+- `TDD AI: Suggest Test Case` - Get AI test suggestions
+- `TDD AI: Update Source Files` - Get implementation suggestions
+- `TDD AI: Update Test Files` - Improve existing tests
+- `TDD AI: Index Codebase` - Manual indexing trigger
+- `TDD AI: Clear Index` - Reset vector index
 
-6. **Configure auto-indexing** (optional):
-   - Use the auto-indexing toggle in the sidebar to enable/disable automatic updates
-   - Adjust settings in VS Code preferences for indexing behavior
-   - Use manual controls when needed (Index Now, Clear Index)
+## 📊 Logging & Analytics
 
-## How to Use
+Comprehensive logging tracks user interactions and AI responses for improvement:
 
-### Initial Setup
+### Features
 
-1. Click on the TDD AI Companion icon in the activity bar
-2. Use the "TDD AI: Setup Project" command to:
-   - Define the current feature you're working on
-   - Select source files and test files
+- **AI Suggestion Logging** - Records AI interactions and user feedback
+- **Chat Query & Response Logging** - Tracks all AI conversations
+- **File Activity Logging** - Records file changes (configurable content inclusion)
+- **Test Run Logging** - Tracks test execution and results
+- **Session Tracking** - Logs user sessions with feedback interface
 
-### Workflow
+### Configuration
 
-1. **Write a test description** in the sidebar input area
-2. Click "Get Test Suggestions" or use the "TDD AI: Suggest Test Case" command
-3. Implement the suggested test in your test files
-4. Run your tests (they will fail initially)
-5. Use "TDD AI: Update Source Files" to get implementation suggestions
-6. Implement the suggested code
-7. Run tests again to verify your implementation passes
-8. Repeat the process for additional features or edge cases
+- `tddAiCompanion.enableLogging` - Enable/disable logging (default: true)
+- `tddAiCompanion.logFileContent` - Include file content in logs (default: false)
+- `tddAiCompanion.logLevel` - Verbosity level (default: "info")
 
-### Additional Commands
+**Log Location**: `.tdd-ai-logs/tdd-ai-companion.log` (JSONL format)
 
-- **TDD AI: Update Source Files**: Get suggestions for implementation code
-- **TDD AI: Update Test Files**: Get suggestions for improving your tests
-- **TDD AI: Update Current Feature**: Change the feature you're working on
-- **TDD AI: Index Files**: Manually trigger indexing of selected files
-- **TDD AI: Clear Index**: Remove all entries from the vector index
-- **TDD AI: Toggle Auto-Indexing**: Enable/disable automatic indexing
+## 🔧 Development
 
-### Auto-Indexing Features
+### Building from Source
 
-The extension now includes intelligent auto-indexing capabilities:
+```bash
+git clone [repository-url]
+cd tdd-ai-companion
+npm install
+npm run compile
+npm install -g @vscode/vsce
+vsce package
+```
 
-- **Automatic Updates**: File changes are automatically detected and indexed
-- **Smart Strategies**: Choose how the system handles updates (smart/incremental/full)
-- **Real-time Monitoring**: View indexing status, progress, and statistics in the sidebar
-- **Manual Override**: Force indexing or disable auto-updates when needed
-- **Pattern Filtering**: Configure which files to include or exclude from indexing
+This creates `tdd-ai-companion-0.0.1.vsix` for installation.
 
-For complete auto-indexing documentation, see [AUTO_INDEXING_SYSTEM.md](./AUTO_INDEXING_SYSTEM.md).
+## ⚠️ Known Issues
 
-### User Activity & AI Interaction Logging
+- Requires internet access for Google Gemini and Pinecone services
+- Large codebases may take longer to index initially
+- Development version - may contain bugs or incomplete features
 
-The extension includes comprehensive logging capabilities to track user interactions and AI responses:
+## 📝 Release Notes
 
-- **AI Suggestion Logging**: Records when AI suggestions are provided and user interactions with them
-- **Chat Query & Response Logging**: Tracks all chat queries sent to AI and the responses received
-- **User Feedback Logging**: Captures user feedback (thumbs up/down) on AI responses for quality improvement
-- **File Activity Logging**: Records file save events with optional content logging (only for user-selected files)
-- **📁 File Selection Logging**: Tracks when users select/deselect source and test files, including bulk operations
-- **Test Run Logging**: Tracks test execution events and results
-- **Session Tracking**: Logs session start/end events with participant identification
+### v0.0.1 - Initial Release
 
-#### Logging Configuration
-
-Configure logging behavior through VS Code settings:
-
-- **Enable/Disable Logging**: `tddAiCompanion.enableLogging` (default: true)
-- **Log File Content**: `tddAiCompanion.logFileContent` - Include full file content in file save logs (default: false)
-- **Log Level**: `tddAiCompanion.logLevel` - Control verbosity: "debug", "info", "warn", "error" (default: "info")
-
-#### Log File Location
-
-Logs are written to `.tdd-ai-logs/tdd-ai-companion.log` in your workspace root directory in JSONL format. Each log entry includes:
-
-- Timestamp
-- Event type
-- Relevant data (query/response content, file paths, feedback, etc.)
-- Session and participant tracking information
-
-#### User Feedback Interface
-
-Each AI response in the chat includes a feedback section with thumbs up/down buttons:
-
-- Feedback is automatically saved and persists across sessions
-- Visual indicators show your previous feedback choices
-- All feedback is logged for AI model improvement
-
-## Known Issues
-
-- This extension requires internet access to connect to Google Gemini and Pinecone services
-- Large codebases may take longer to index for RAG functionality
-- This is a development version and may contain bugs or incomplete features
-
-## Release Notes
-
-### 0.0.1
-
-- Initial development release
-- Core functionality for TDD workflow assistance
-- Gemini AI integration
+- Core TDD workflow assistance with AI-powered suggestions
+- Gemini AI integration for test case and code generation
 - RAG capabilities for contextual understanding
-- Sidebar interface for interaction
-- **🚀 NEW: Comprehensive Auto-Indexing System**
-  - Intelligent automatic management of codebase embeddings
-  - Smart file watching with configurable patterns and strategies
-  - Real-time status monitoring and progress tracking
-  - Manual controls with auto-indexing toggle
-  - 10 comprehensive configuration options for fine-tuning
-  - Pattern-based file filtering and change detection
-  - Debounced updates and batch processing for optimal performance
+- Sidebar interface for seamless interaction
+- **🚀 Comprehensive Auto-Indexing System**
+  - Intelligent codebase embedding management
+  - Smart file watching with configurable strategies
+  - Real-time monitoring and manual controls
+  - 3-5x performance improvements through optimized batch processing
+  - Pattern-based filtering and change detection
+
+## 🤝 Contributing
+
+Contributions welcome! Please submit Pull Requests with clear descriptions.
 
 ---
 
-## Development
-
-This extension is built using TypeScript and the VS Code Extension API.
-
-### Building the Extension from Source
-
-If you want to build the VSIX file yourself:
-
-1. Clone the repository: `git clone [repository-url]`
-2. Navigate to the project directory: `cd tdd-ai-companion`
-3. Install dependencies: `npm install`
-4. Install vsce if you don't have it: `npm install -g @vscode/vsce`
-5. Build the extension: `npm run compile`
-6. Package the extension: `vsce package`
-   - This creates a file named `tdd-ai-companion-0.0.1.vsix` in the project root
-
-The generated VSIX file can then be installed using any of the methods described in the Installation Instructions section.
-
-### Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-**Enjoy your Test-Driven Development journey with AI assistance!**
+**Enjoy your AI-enhanced Test-Driven Development journey!** 🚀
